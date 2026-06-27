@@ -1,3 +1,4 @@
+<<<<<<< HEAD
 # SAPFlow - SAP Transport Management CI/CD Pipeline
 
 A production-grade automated CI/CD DevOps pipeline for SAP S/4HANA transport management, deployed on AWS with real-time monitoring dashboard.
@@ -273,3 +274,7 @@ MIT
 ## Support
 
 For issues and questions, please open an issue on GitHub.
+=======
+# SAPFLOW
+Enterprise-grade SAP DevOps automation pipeline — CI/CD for SAP S/4HANA transport management with real-time monitoring dashboard, built on FastAPI · React · Docker · AWS · SAP BTP
+>>>>>>> 5e1a51ffb743a9739f7fce1010120d5108924ccd
