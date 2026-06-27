@@ -1,0 +1,132 @@
+name: SAPFlow CI Pipeline
+
+on:
+  push:
+    branches:
+      - main
+      - develop
+  pull_request:
+    branches:
+      - main
+      - develop
+
+jobs:
+  code-quality:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+      
+      - name: Set up Python
+        uses: actions/setup-python@v4
+        with:
+          python-version: '3.11'
+      
+      - name: Install dependencies
+        run: |
+          pip install flake8 black pytest pytest-cov
+      
+      - name: Run flake8
+        run: |
+          flake8 backend/ --count --select=E9,F63,F7,F82 --show-source --statistics
+          flake8 backend/ --count --exit-zero --max-complexity=10 --max-line-length=127 --statistics
+      
+      - name: Run black check
+        run: |
+          black --check backend/
+      
+      - name: Run pytest with coverage
+        run: |
+          pytest backend/ --cov=backend --cov-report=xml --cov-report=term
+      
+      - name: Upload coverage
+        uses: actions/upload-artifact@v3
+        with:
+          name: coverage-report
+          path: coverage.xml
+
+  abap-validation:
+    runs-on: ubuntu-latest
+    needs: code-quality
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+      
+      - name: Set up Python
+        uses: actions/setup-python@v4
+        with:
+          python-version: '3.11'
+      
+      - name: Install dependencies
+        run: |
+          pip install requests
+      
+      - name: Run ABAP Inspector
+        env:
+          SAP_BTP_HOST: ${{ secrets.SAP_BTP_HOST }}
+          SAP_CLIENT_ID: ${{ secrets.SAP_CLIENT_ID }}
+          SAP_CLIENT_SECRET: ${{ secrets.SAP_CLIENT_SECRET }}
+          SAP_TOKEN_URL: ${{ secrets.SAP_TOKEN_URL }}
+          SAP_MOCK_MODE: true
+        run: |
+          python transport-runner/test_runner.py --transport-id DEVK900001 --source-system DEV --mock
+      
+      - name: Post GitHub status
+        if: always()
+        uses: actions/github-script@v6
+        with:
+          script: |
+            github.rest.repos.createCommitStatus({
+              owner: context.repo.owner,
+              repo: context.repo.repo,
+              sha: context.sha,
+              state: '${{ job.status }}',
+              context: 'ABAP Validation',
+              description: 'ABAP code inspection completed'
+            })
+
+  docker-build:
+    runs-on: ubuntu-latest
+    needs: abap-validation
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+      
+      - name: Configure AWS credentials
+        uses: aws-actions/configure-aws-credentials@v4
+        with:
+          aws-access-key-id: ${{ secrets.AWS_ACCESS_KEY_ID }}
+          aws-secret-access-key: ${{ secrets.AWS_SECRET_ACCESS_KEY }}
+          aws-region: ap-south-1
+      
+      - name: Login to Amazon ECR
+        id: login-ecr
+        uses: aws-actions/amazon-ecr-login@v2
+      
+      - name: Build and push Docker image
+        env:
+          ECR_REGISTRY: ${{ steps.login-ecr.outputs.registry }}
+          ECR_REPOSITORY: sapflow-transport-runner
+          IMAGE_TAG: ${{ github.sha }}
+        run: |
+          docker build -t $ECR_REGISTRY/$ECR_REPOSITORY:$IMAGE_TAG transport-runner/
+          docker push $ECR_REGISTRY/$ECR_REPOSITORY:$IMAGE_TAG
+
+  notify:
+    runs-on: ubuntu-latest
+    needs: [code-quality, abap-validation, docker-build]
+    if: always()
+    steps:
+      - name: Send Slack notification
+        uses: slackapi/slack-github-action@v1.24.0
+        with:
+          payload: |
+            {
+              "repo": "${{ github.repository }}",
+              "branch": "${{ github.ref_name }}",
+              "commit": "${{ github.sha }}",
+              "status": "${{ job.status }}",
+              "run_url": "${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}"
+            }
+        env:
+          SLACK_WEBHOOK_URL: ${{ secrets.SLACK_WEBHOOK_URL }}

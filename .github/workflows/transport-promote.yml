@@ -1,0 +1,50 @@
+name: Transport Promotion
+
+on:
+  workflow_dispatch:
+    inputs:
+      source_system:
+        description: 'Source system (DEV/QA)'
+        required: true
+        type: choice
+        options:
+          - DEV
+          - QA
+      transport_id:
+        description: 'Transport request ID'
+        required: true
+        type: string
+      target_system:
+        description: 'Target system (QA/PROD)'
+        required: true
+        type: choice
+        options:
+          - QA
+          - PROD
+
+jobs:
+  promote-transport:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+      
+      - name: Call FastAPI promote endpoint
+        env:
+          API_URL: ${{ secrets.API_URL }}
+          TRANSPORT_ID: ${{ github.event.inputs.transport_id }}
+          SOURCE_SYSTEM: ${{ github.event.inputs.source_system }}
+          TARGET_SYSTEM: ${{ github.event.inputs.target_system }}
+        run: |
+          curl -X POST "$API_URL/transport/promote" \
+            -H "Content-Type: application/json" \
+            -d '{
+              "transport_id": "'"$TRANSPORT_ID"'",
+              "source_system": "'"$SOURCE_SYSTEM"'",
+              "target_system": "'"$TARGET_SYSTEM"'",
+              "promoted_by": "github-actions"
+            }'
+      
+      - name: Print result
+        run: |
+          echo "Transport ${{ github.event.inputs.transport_id }} promoted from ${{ github.event.inputs.source_system }} to ${{ github.event.inputs.target_system }}"

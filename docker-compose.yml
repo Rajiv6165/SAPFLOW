@@ -1,0 +1,108 @@
+version: '3.8'
+
+services:
+  postgres:
+    image: postgres:15
+    container_name: sapflow-postgres
+    environment:
+      POSTGRES_DB: sapflow
+      POSTGRES_USER: sapflow
+      POSTGRES_PASSWORD: password
+    ports:
+      - "5432:5432"
+    volumes:
+      - postgres_data:/var/lib/postgresql/data
+    networks:
+      - sapflow-network
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U sapflow"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+
+  redis:
+    image: redis:7
+    container_name: sapflow-redis
+    ports:
+      - "6379:6379"
+    networks:
+      - sapflow-network
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+
+  backend:
+    build:
+      context: ./backend
+      dockerfile: Dockerfile
+    container_name: sapflow-backend
+    ports:
+      - "8000:8000"
+    environment:
+      DATABASE_URL: postgresql://sapflow:password@postgres:5432/sapflow
+      REDIS_URL: redis://redis:6379
+      SAP_BTP_HOST: ${SAP_BTP_HOST}
+      SAP_CLIENT_ID: ${SAP_CLIENT_ID}
+      SAP_CLIENT_SECRET: ${SAP_CLIENT_SECRET}
+      SAP_TOKEN_URL: ${SAP_TOKEN_URL}
+      SAP_MOCK_MODE: ${SAP_MOCK_MODE:-true}
+      AWS_ACCESS_KEY_ID: ${AWS_ACCESS_KEY_ID}
+      AWS_SECRET_ACCESS_KEY: ${AWS_SECRET_ACCESS_KEY}
+      AWS_REGION: ${AWS_REGION}
+      SNS_ALERT_TOPIC_ARN: ${SNS_ALERT_TOPIC_ARN}
+      GITHUB_TOKEN: ${GITHUB_TOKEN}
+      GITHUB_REPO: ${GITHUB_REPO}
+    volumes:
+      - ./backend:/app
+    depends_on:
+      postgres:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+    networks:
+      - sapflow-network
+    command: uvicorn main:app --host 0.0.0.0 --port 8000 --reload
+
+  frontend:
+    build:
+      context: ./frontend
+      dockerfile: Dockerfile
+    container_name: sapflow-frontend
+    ports:
+      - "3000:3000"
+    environment:
+      NEXT_PUBLIC_API_URL: http://localhost:8000
+      NEXT_PUBLIC_WS_URL: ws://localhost:8000/ws/pipeline
+    volumes:
+      - ./frontend:/app
+      - /app/node_modules
+    depends_on:
+      - backend
+    networks:
+      - sapflow-network
+    command: npm run dev
+
+  transport-runner:
+    build:
+      context: ./transport-runner
+      dockerfile: Dockerfile
+    container_name: sapflow-transport-runner
+    environment:
+      SAP_BTP_HOST: ${SAP_BTP_HOST}
+      SAP_CLIENT_ID: ${SAP_CLIENT_ID}
+      SAP_CLIENT_SECRET: ${SAP_CLIENT_SECRET}
+      SAP_TOKEN_URL: ${SAP_TOKEN_URL}
+      SAP_MOCK_MODE: ${SAP_MOCK_MODE:-true}
+    depends_on:
+      - backend
+    networks:
+      - sapflow-network
+
+networks:
+  sapflow-network:
+    driver: bridge
+
+volumes:
+  postgres_data:

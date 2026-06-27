@@ -1,0 +1,60 @@
+{
+  "Alarms": [
+    {
+      "AlarmName": "SAPFlow-Backend-CPU-High",
+      "AlarmDescription": "Alert when backend CPU utilization exceeds 80%",
+      "MetricName": "CPUUtilization",
+      "Namespace": "AWS/ECS",
+      "Statistic": "Average",
+      "Period": 300,
+      "EvaluationPeriods": 2,
+      "Threshold": 80,
+      "ComparisonOperator": "GreaterThanThreshold",
+      "Dimensions": [
+        {
+          "Name": "ServiceName",
+          "Value": "sapflow-backend"
+        }
+      ]
+    },
+    {
+      "AlarmName": "SAPFlow-Backend-Memory-High",
+      "AlarmDescription": "Alert when backend memory utilization exceeds 85%",
+      "MetricName": "MemoryUtilization",
+      "Namespace": "AWS/ECS",
+      "Statistic": "Average",
+      "Period": 300,
+      "EvaluationPeriods": 2,
+      "Threshold": 85,
+      "ComparisonOperator": "GreaterThanThreshold",
+      "Dimensions": [
+        {
+          "Name": "ServiceName",
+          "Value": "sapflow-backend"
+        }
+      ]
+    },
+    {
+      "AlarmName": "SAPFlow-Pipeline-Failure-Rate",
+      "AlarmDescription": "Alert when pipeline failure rate exceeds 10%",
+      "MetricName": "PipelineFailureRate",
+      "Namespace": "SAPFlow",
+      "Statistic": "Average",
+      "Period": 3600,
+      "EvaluationPeriods": 1,
+      "Threshold": 10,
+      "ComparisonOperator": "GreaterThanThreshold"
+    },
+    {
+      "AlarmName": "SAPFlow-Transport-Validation-Failures",
+      "AlarmDescription": "Alert when transport validation failures exceed threshold",
+      "MetricName": "ValidationFailures",
+      "Namespace": "SAPFlow",
+      "Statistic": "Sum",
+      "Period": 3600,
+      "EvaluationPeriods": 1,
+      "Threshold": 5,
+      "ComparisonOperator": "GreaterThanThreshold"
+    }
+  ]
+}
