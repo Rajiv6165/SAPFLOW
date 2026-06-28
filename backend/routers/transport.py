@@ -10,6 +10,8 @@ import logging
 
 logger = logging.getLogger(__name__)
 
+from backend.models.schemas import TransportPromoteRequest
+
 router = APIRouter(prefix="/transport", tags=["transport"])
 sap_service = SAPBTPService()
 
@@ -64,36 +66,60 @@ async def get_transport_history(db: AsyncSession = Depends(get_db)):
 
 @router.post("/promote")
 async def promote_transport(
-    transport_id: str,
-    source_system: str,
-    target_system: str,
-    promoted_by: str,
+    request: TransportPromoteRequest,
     db: AsyncSession = Depends(get_db)
 ):
     try:
+        transport_id = request.transport_id
+        source_system = request.source_system
+        target_system = request.target_system
+        promoted_by = request.promoted_by
+
         result = await sap_service.promote_transport(transport_id, source_system, target_system)
         
-        new_record = TransportRecord(
-            transport_id=transport_id,
-            description=f"Transport {transport_id}",
-            source_system=source_system,
-            target_system=target_system,
-            status=result.get("status", "pending"),
-            promoted_by=promoted_by,
-            promoted_at=datetime.utcnow(),
-            validation_report=result
+        # Check if record already exists
+        existing_record_q = await db.execute(
+            select(TransportRecord).where(TransportRecord.transport_id == transport_id)
         )
+        existing_record = existing_record_q.scalar_one_or_none()
         
-        db.add(new_record)
-        await db.commit()
-        await db.refresh(new_record)
-        
-        return {
-            "id": str(new_record.id),
-            "transport_id": new_record.transport_id,
-            "status": new_record.status,
-            "message": result.get("message", "Transport promotion initiated")
-        }
+        if existing_record:
+            existing_record.source_system = source_system
+            existing_record.target_system = target_system
+            existing_record.status = result.get("status", "pending")
+            existing_record.promoted_by = promoted_by
+            existing_record.promoted_at = datetime.utcnow()
+            existing_record.validation_report = result
+            await db.commit()
+            await db.refresh(existing_record)
+            
+            return {
+                "id": str(existing_record.id),
+                "transport_id": existing_record.transport_id,
+                "status": existing_record.status,
+                "message": result.get("message", "Transport promotion updated")
+            }
+        else:
+            new_record = TransportRecord(
+                transport_id=transport_id,
+                description=f"Transport {transport_id}",
+                source_system=source_system,
+                target_system=target_system,
+                status=result.get("status", "pending"),
+                promoted_by=promoted_by,
+                promoted_at=datetime.utcnow(),
+                validation_report=result
+            )
+            db.add(new_record)
+            await db.commit()
+            await db.refresh(new_record)
+            
+            return {
+                "id": str(new_record.id),
+                "transport_id": new_record.transport_id,
+                "status": new_record.status,
+                "message": result.get("message", "Transport promotion initiated")
+            }
     except Exception as e:
         logger.error(f"Error promoting transport: {e}")
         raise HTTPException(status_code=500, detail=str(e))

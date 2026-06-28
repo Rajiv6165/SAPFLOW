@@ -116,3 +116,43 @@ class AlertResponse(BaseModel):
 
 class CloudWatchAlarmsResponse(BaseModel):
     alarms: List[AlertResponse]
+
+
+# ─── Missing Phase 2 Schemas ───────────────────────────────────────────────────
+
+class PipelineMetrics(BaseModel):
+    date: str
+    success: int
+    failed: int
+
+
+class TransportResponse(TransportRecordResponse):
+    pass
+
+
+class HealthHistoryResponse(BaseModel):
+    snapshots: List[SystemHealthResponse]
+
+
+class WebSocketSummary(BaseModel):
+    total_runs_today: int
+    success_rate: float
+    active_transports: int
+    system_status: str
+
+
+class WebSocketRunDetail(BaseModel):
+    id: str
+    run_id: str
+    branch: str
+    commit_sha: str
+    status: str
+    duration_seconds: Optional[int] = None
+    triggered_at: str
+
+
+class WebSocketPayload(BaseModel):
+    type: str = "pipeline_update"
+    timestamp: str
+    summary: WebSocketSummary
+    recent_runs: List[WebSocketRunDetail]

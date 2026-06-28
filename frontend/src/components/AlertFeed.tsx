@@ -1,6 +1,7 @@
 'use client';
 
 import { useState, useEffect, useCallback } from 'react';
+import { api } from '@/lib/api';
 
 interface Alert {
   id: string;
@@ -91,10 +92,23 @@ export default function AlertFeed() {
   const [alerts, setAlerts] = useState<Alert[]>([]);
   const [dismissed, setDismissed] = useState<Set<string>>(new Set());
   const [isExpanded, setIsExpanded] = useState(false);
+  const [loading, setLoading] = useState(true);
+  const [error, setError] = useState(false);
   const [, forceUpdate] = useState(0);
 
   useEffect(() => {
-    setAlerts(MOCK_ALERTS);
+    setLoading(true);
+    api.getSystemHealth()
+      .then((data) => {
+        if (data) {
+          setAlerts(MOCK_ALERTS);
+          setError(false);
+        } else {
+          setError(true);
+        }
+      })
+      .catch(() => setError(true))
+      .finally(() => setLoading(false));
   }, []);
 
   // Refresh relative timestamps every 30s
@@ -104,7 +118,11 @@ export default function AlertFeed() {
   }, []);
 
   const dismissAlert = useCallback((id: string) => {
-    setDismissed((prev) => new Set([...prev, id]));
+    setDismissed((prev) => {
+      const next = new Set(prev);
+      next.add(id);
+      return next;
+    });
   }, []);
 
   const restoreAll = useCallback(() => {
@@ -130,12 +148,23 @@ export default function AlertFeed() {
           <div className="flex items-center gap-3">
             <div
               className="w-8 h-8 rounded-lg flex items-center justify-center relative"
-              style={{ background: errorCount > 0 ? 'rgba(239,68,68,0.15)' : 'rgba(16,185,129,0.15)' }}
+              style={{
+                background: error
+                  ? 'rgba(148,163,184,0.15)'
+                  : errorCount > 0
+                  ? 'rgba(239,68,68,0.15)'
+                  : 'rgba(16,185,129,0.15)',
+              }}
             >
-              <svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke={errorCount > 0 ? '#ef4444' : '#10b981'}>
+              <svg
+                className="w-4 h-4"
+                fill="none"
+                viewBox="0 0 24 24"
+                stroke={error ? '#64748b' : errorCount > 0 ? '#ef4444' : '#10b981'}
+              >
                 <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1.5} d="M15 17h5l-1.405-1.405A2.032 2.032 0 0118 14.158V11a6.002 6.002 0 00-4-5.659V5a2 2 0 10-4 0v.341C7.67 6.165 6 8.388 6 11v3.159c0 .538-.214 1.055-.595 1.436L4 17h5m6 0v1a3 3 0 11-6 0v-1m6 0H9" />
               </svg>
-              {visible.length > 0 && (
+              {!error && visible.length > 0 && (
                 <span
                   className="absolute -top-1 -right-1 w-4 h-4 rounded-full text-xs font-bold flex items-center justify-center"
                   style={{
@@ -151,10 +180,18 @@ export default function AlertFeed() {
             <div className="text-left">
               <p className="text-sm font-semibold" style={{ color: '#e2e8f0' }}>Alert Feed</p>
               <p className="text-xs" style={{ color: '#64748b' }}>
-                {errorCount > 0 ? `${errorCount} error${errorCount > 1 ? 's' : ''}` : ''}
-                {errorCount > 0 && warningCount > 0 ? ' · ' : ''}
-                {warningCount > 0 ? `${warningCount} warning${warningCount > 1 ? 's' : ''}` : ''}
-                {errorCount === 0 && warningCount === 0 ? 'No critical alerts' : ''}
+                {error ? (
+                  'Backend offline'
+                ) : loading ? (
+                  'Loading alerts...'
+                ) : (
+                  <>
+                    {errorCount > 0 ? `${errorCount} error${errorCount > 1 ? 's' : ''}` : ''}
+                    {errorCount > 0 && warningCount > 0 ? ' · ' : ''}
+                    {warningCount > 0 ? `${warningCount} warning${warningCount > 1 ? 's' : ''}` : ''}
+                    {errorCount === 0 && warningCount === 0 ? 'No critical alerts' : ''}
+                  </>
+                )}
               </p>
             </div>
           </div>
@@ -185,7 +222,24 @@ export default function AlertFeed() {
               borderTop: '1px solid rgba(99,102,241,0.1)',
             }}
           >
-            {visible.length === 0 ? (
+            {error ? (
+              <div className="flex flex-col items-center justify-center py-12 gap-3">
+                <div className="w-12 h-12 rounded-full flex items-center justify-center" style={{ background: 'rgba(239,68,68,0.1)' }}>
+                  <svg className="w-6 h-6" fill="none" viewBox="0 0 24 24" stroke="#64748b">
+                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1.5} d="M12 9v2m0 4h.01m-6.938 4h13.856c1.54 0 2.502-1.667 1.732-2.5L13.732 4c-.77-.833-1.964-.833-2.732 0L4.082 16.5C3.312 18.333 4.274 20 5.814 20z" />
+                  </svg>
+                </div>
+                <p className="text-sm font-semibold" style={{ color: '#e2e8f0' }}>Backend offline</p>
+                <p className="text-xs text-center px-4" style={{ color: '#64748b' }}>Backend offline — start docker-compose</p>
+              </div>
+            ) : loading ? (
+              <div className="flex items-center justify-center py-12">
+                <svg className="w-6 h-6 animate-spin" fill="none" viewBox="0 0 24 24" style={{ color: '#6366f1' }}>
+                  <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4" />
+                  <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4z" />
+                </svg>
+              </div>
+            ) : visible.length === 0 ? (
               <div className="flex flex-col items-center justify-center py-8 gap-3">
                 <svg className="w-8 h-8" fill="none" viewBox="0 0 24 24" stroke="#10b981">
                   <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1.5} d="M9 12l2 2 4-4m6 2a9 9 0 11-18 0 9 9 0 0118 0z" />

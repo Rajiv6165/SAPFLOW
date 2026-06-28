@@ -11,6 +11,12 @@ router = APIRouter(prefix="/health", tags=["health"])
 sap_service = SAPBTPService()
 
 
+@router.get("")
+@router.get("/")
+async def root_health():
+    return {"status": "ok", "service": "sapflow-backend"}
+
+
 @router.get("/system")
 async def get_system_health():
     try:
@@ -22,7 +28,7 @@ async def get_system_health():
 
 
 @router.get("/history")
-async def get_health_history(limit: int = 50):
+async def get_health_history(limit: int = 48):
     from sqlalchemy import select
     from backend.core.config import settings
     from sqlalchemy.ext.asyncio import create_async_engine, AsyncSession

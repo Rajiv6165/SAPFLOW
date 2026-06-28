@@ -91,10 +91,16 @@ export default function SystemHealth() {
         api.getSystemHealth(),
         api.getHealthHistory(10),
       ]);
-      setHealth(currentHealth);
-      setHistory(healthHistory);
+      if (currentHealth && healthHistory) {
+        setHealth(currentHealth);
+        setHistory(healthHistory);
+      } else {
+        setHealth(null);
+        setHistory([]);
+      }
     } catch {
-      // fail silently; show loading state
+      setHealth(null);
+      setHistory([]);
     } finally {
       setLoading(false);
     }
@@ -161,12 +167,14 @@ export default function SystemHealth() {
                 <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1.5} d="M12 9v2m0 4h.01m-6.938 4h13.856c1.54 0 2.502-1.667 1.732-2.5L13.732 4c-.77-.833-1.964-.833-2.732 0L4.082 16.5C3.312 18.333 4.274 20 5.814 20z" />
               </svg>
             </div>
-            <p className="text-sm" style={{ color: '#475569' }}>Backend not reachable</p>
+            <p className="text-sm font-semibold" style={{ color: '#e2e8f0' }}>Backend offline</p>
+            <p className="text-xs text-center" style={{ color: '#64748b' }}>Backend offline — start docker-compose</p>
           </div>
         </div>
       </div>
     );
   }
+
 
   const cpuT  = getMetricThreshold(health.cpu_percent, 'cpu');
   const memT  = getMetricThreshold(health.memory_percent, 'memory');

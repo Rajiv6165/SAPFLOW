@@ -69,14 +69,45 @@ const CustomTooltip = ({ active, payload, label }: TooltipProps<ValueType, NameT
 export default function MetricsChart() {
   const [metrics, setMetrics] = useState<PipelineMetrics[]>([]);
   const [loading, setLoading] = useState(true);
+  const [error, setError] = useState(false);
 
   useEffect(() => {
+    setLoading(true);
     api
       .getPipelineMetrics()
-      .then((data) => setMetrics(data))
-      .catch(() => {})
+      .then((data) => {
+        if (data) {
+          setMetrics(data);
+          setError(false);
+        } else {
+          setError(true);
+        }
+      })
+      .catch(() => setError(true))
       .finally(() => setLoading(false));
   }, []);
+
+  if (error) {
+    return (
+      <div className="glass-card p-6">
+        <div className="flex items-center justify-between mb-5 flex-wrap gap-3">
+          <div>
+            <p className="section-title mb-1">ANALYTICS</p>
+            <h3 className="card-title">Pipeline Metrics — Last 30 Days</h3>
+          </div>
+        </div>
+        <div className="flex flex-col items-center justify-center py-12 gap-3">
+          <div className="w-12 h-12 rounded-full flex items-center justify-center" style={{ background: 'rgba(239,68,68,0.1)' }}>
+            <svg className="w-6 h-6" fill="none" viewBox="0 0 24 24" stroke="#ef4444">
+              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1.5} d="M12 9v2m0 4h.01m-6.938 4h13.856c1.54 0 2.502-1.667 1.732-2.5L13.732 4c-.77-.833-1.964-.833-2.732 0L4.082 16.5C3.312 18.333 4.274 20 5.814 20z" />
+            </svg>
+          </div>
+          <p className="text-sm font-semibold" style={{ color: '#e2e8f0' }}>Backend offline</p>
+          <p className="text-xs text-center" style={{ color: '#64748b' }}>Backend offline — start docker-compose</p>
+        </div>
+      </div>
+    );
+  }
 
   const chartData: ChartPoint[] = metrics.map((m) => ({
     date: new Date(m.date).toLocaleDateString('en-US', { month: 'short', day: 'numeric' }),

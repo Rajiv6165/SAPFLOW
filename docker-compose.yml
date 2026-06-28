@@ -7,7 +7,7 @@ services:
     environment:
       POSTGRES_DB: sapflow
       POSTGRES_USER: sapflow
-      POSTGRES_PASSWORD: password
+      POSTGRES_PASSWORD: sapflow123
     ports:
       - "5432:5432"
     volumes:
@@ -16,7 +16,7 @@ services:
       - sapflow-network
     healthcheck:
       test: ["CMD-SHELL", "pg_isready -U sapflow"]
-      interval: 10s
+      interval: 5s
       timeout: 5s
       retries: 5
 
@@ -29,9 +29,9 @@ services:
       - sapflow-network
     healthcheck:
       test: ["CMD", "redis-cli", "ping"]
-      interval: 10s
-      timeout: 5s
-      retries: 5
+      interval: 5s
+      timeout: 3s
+      retries: 3
 
   backend:
     build:
@@ -41,7 +41,7 @@ services:
     ports:
       - "8000:8000"
     environment:
-      DATABASE_URL: postgresql://sapflow:password@postgres:5432/sapflow
+      DATABASE_URL: postgresql://sapflow:sapflow123@postgres:5432/sapflow
       REDIS_URL: redis://redis:6379
       SAP_BTP_HOST: ${SAP_BTP_HOST}
       SAP_CLIENT_ID: ${SAP_CLIENT_ID}
@@ -55,7 +55,7 @@ services:
       GITHUB_TOKEN: ${GITHUB_TOKEN}
       GITHUB_REPO: ${GITHUB_REPO}
     volumes:
-      - ./backend:/app
+      - ./backend:/backend
     depends_on:
       postgres:
         condition: service_healthy
@@ -63,12 +63,34 @@ services:
         condition: service_healthy
     networks:
       - sapflow-network
-    command: uvicorn main:app --host 0.0.0.0 --port 8000 --reload
+    command: uvicorn backend.main:app --host 0.0.0.0 --port 8000 --reload
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:8000/health"]
+      interval: 10s
+      timeout: 5s
+      retries: 3
+
+  seed:
+    build:
+      context: ./backend
+      dockerfile: Dockerfile
+    container_name: sapflow-seed
+    environment:
+      DATABASE_URL: postgresql://sapflow:sapflow123@postgres:5432/sapflow
+      REDIS_URL: redis://redis:6379
+    depends_on:
+      backend:
+        condition: service_healthy
+    networks:
+      - sapflow-network
+    command: python -m backend.seed
+    restart: "no"
 
   frontend:
     build:
       context: ./frontend
       dockerfile: Dockerfile
+      target: builder
     container_name: sapflow-frontend
     ports:
       - "3000:3000"

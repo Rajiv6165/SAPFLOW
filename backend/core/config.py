@@ -1,19 +1,27 @@
 from pydantic_settings import BaseSettings
+from pydantic import field_validator
 from typing import Optional
 
 
 class Settings(BaseSettings):
     # Database
-    DATABASE_URL: str
+    DATABASE_URL: str = "postgresql+asyncpg://sapflow:sapflow123@localhost:5432/sapflow"
+    
+    @field_validator("DATABASE_URL", mode="before")
+    @classmethod
+    def coerce_database_url(cls, v: str) -> str:
+        if isinstance(v, str) and v.startswith("postgresql://"):
+            return v.replace("postgresql://", "postgresql+asyncpg://", 1)
+        return v
     
     # Redis
-    REDIS_URL: str
+    REDIS_URL: str = "redis://localhost:6379"
     
     # SAP BTP Configuration
-    SAP_BTP_HOST: str
-    SAP_CLIENT_ID: str
-    SAP_CLIENT_SECRET: str
-    SAP_TOKEN_URL: str
+    SAP_BTP_HOST: Optional[str] = None
+    SAP_CLIENT_ID: Optional[str] = None
+    SAP_CLIENT_SECRET: Optional[str] = None
+    SAP_TOKEN_URL: Optional[str] = None
     SAP_MOCK_MODE: bool = True
     
     # AWS Configuration
@@ -28,7 +36,7 @@ class Settings(BaseSettings):
     GITHUB_REPO: Optional[str] = None
     
     # CORS
-    CORS_ORIGINS: list[str] = ["http://localhost:3000", "http://localhost:8000"]
+    CORS_ORIGINS: list[str] = ["http://localhost:3000"]
     
     class Config:
         env_file = ".env"

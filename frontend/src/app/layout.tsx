@@ -1,12 +1,6 @@
-import type { Metadata } from 'next';
-import './globals.css';
+'use client';
 
-export const metadata: Metadata = {
-  title: 'SAPFlow — SAP S/4HANA Transport Pipeline',
-  description:
-    'Real-time monitoring dashboard for SAP S/4HANA transport management and automated CI/CD pipelines. Built on AWS with FastAPI, Next.js, and SAP BTP.',
-  keywords: 'SAP, S4HANA, transport management, CI/CD, DevOps, pipeline, AWS',
-};
+import './globals.css';
 
 export default function RootLayout({ children }: { children: React.ReactNode }) {
   return (

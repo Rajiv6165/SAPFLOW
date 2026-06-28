@@ -34,10 +34,15 @@ aws_service = AWSAlertsService()
 
 @app.on_event("startup")
 async def startup_event():
-    engine = create_async_engine(settings.DATABASE_URL, echo=False)
+    db_url = settings.DATABASE_URL
+    if db_url.startswith("postgresql://"):
+        db_url = db_url.replace("postgresql://", "postgresql+asyncpg://", 1)
+        
+    engine = create_async_engine(db_url, echo=False)
     async with engine.begin() as conn:
         await conn.run_sync(Base.metadata.create_all)
     logger.info("Database tables created successfully")
+    await engine.dispose()
     
     asyncio.create_task(poll_system_health())
     asyncio.create_task(broadcast_pipeline_status())
@@ -48,7 +53,11 @@ async def poll_system_health():
         try:
             health_data = await sap_service.get_system_health()
             
-            engine = create_async_engine(settings.DATABASE_URL, echo=False)
+            db_url = settings.DATABASE_URL
+            if db_url.startswith("postgresql://"):
+                db_url = db_url.replace("postgresql://", "postgresql+asyncpg://", 1)
+                
+            engine = create_async_engine(db_url, echo=False)
             async with AsyncSession(engine) as session:
                 snapshot = SystemHealthSnapshot(
                     cpu_percent=health_data["cpu_percent"],
@@ -59,7 +68,7 @@ async def poll_system_health():
                 )
                 session.add(snapshot)
                 await session.commit()
-            
+            await engine.dispose()
             logger.info("System health snapshot recorded")
         except Exception as e:
             logger.error(f"Error polling system health: {e}")
@@ -70,32 +79,7 @@ async def poll_system_health():
 async def broadcast_pipeline_status():
     while True:
         try:
-            from sqlalchemy import select
-            engine = create_async_engine(settings.DATABASE_URL, echo=False)
-            async with AsyncSession(engine) as session:
-                result = await session.execute(
-                    select(PipelineRun)
-                    .order_by(PipelineRun.triggered_at.desc())
-                    .limit(10)
-                )
-                runs = result.scalars().all()
-                
-                status_data = {
-                    "type": "pipeline_status",
-                    "data": [
-                        {
-                            "run_id": run.run_id,
-                            "branch": run.branch,
-                            "commit_sha": run.commit_sha,
-                            "status": run.status,
-                            "triggered_at": run.triggered_at.isoformat(),
-                            "duration_seconds": run.duration_seconds
-                        }
-                        for run in runs
-                    ]
-                }
-                
-                await manager.broadcast(status_data)
+            await manager.broadcast()
         except Exception as e:
             logger.error(f"Error broadcasting pipeline status: {e}")
         

@@ -38,90 +38,58 @@ export interface PipelineMetrics {
   failed: number;
 }
 
-class APIClient {
-  private baseUrl: string;
+const BASE_URL = API_URL;
 
-  constructor(baseUrl: string = API_URL) {
-    this.baseUrl = baseUrl;
-  }
-
-  private async request<T>(endpoint: string, options?: RequestInit): Promise<T> {
-    const url = `${this.baseUrl}${endpoint}`;
+const safeFetch = async <T>(url: string, options?: RequestInit): Promise<T | null> => {
+  try {
     const response = await fetch(url, {
+      ...options,
       headers: {
         'Content-Type': 'application/json',
         ...options?.headers,
       },
-      ...options,
     });
-
     if (!response.ok) {
-      throw new Error(`API error: ${response.status} ${response.statusText}`);
+      console.warn(`Fetch returned status ${response.status} for ${url}`);
+      return null;
     }
-
-    return response.json();
+    return await response.json();
+  } catch (error) {
+    console.error(`Fetch error for ${url}:`, error);
+    return null;
   }
+};
 
-  async getPipelineStatus(): Promise<{ current_status: string; last_runs: PipelineRun[] }> {
-    return this.request('/pipeline/status');
-  }
-
-  async getPipelineRun(runId: string): Promise<PipelineRun> {
-    return this.request(`/pipeline/runs/${runId}`);
-  }
-
-  async triggerPipeline(branch: string = 'main'): Promise<{ message: string; branch: string }> {
-    return this.request(`/pipeline/trigger?branch=${branch}`, {
+export const api = {
+  getPipelineRuns: () => safeFetch<any>(`${BASE_URL}/pipeline/status`),
+  getPipelineStatus: () => safeFetch<any>(`${BASE_URL}/pipeline/status`),
+  getPipelineMetrics: () => safeFetch<PipelineMetrics[]>(`${BASE_URL}/pipeline/metrics`),
+  getActiveTransports: () => safeFetch<{ transports: any[] }>(`${BASE_URL}/transport/active`),
+  getTransportHistory: () => safeFetch<{ transports: TransportRecord[] }>(`${BASE_URL}/transport/history`),
+  promoteTransport: (...args: any[]) => {
+    let bodyData;
+    if (args.length === 1 && typeof args[0] === 'object') {
+      bodyData = args[0];
+    } else {
+      bodyData = {
+        transport_id: args[0],
+        source_system: args[1],
+        target_system: args[2],
+        promoted_by: args[3] || 'manual',
+      };
+    }
+    return safeFetch<any>(`${BASE_URL}/transport/promote`, {
       method: 'POST',
+      body: JSON.stringify(bodyData),
     });
-  }
-
-  async getPipelineMetrics(): Promise<PipelineMetrics[]> {
-    return this.request('/pipeline/metrics');
-  }
-
-  async getActiveTransports(): Promise<{ transports: any[] }> {
-    return this.request('/transport/active');
-  }
-
-  async getTransportHistory(): Promise<{ transports: TransportRecord[] }> {
-    return this.request('/transport/history');
-  }
-
-  async promoteTransport(
-    transportId: string,
-    sourceSystem: string,
-    targetSystem: string,
-    promotedBy: string
-  ): Promise<any> {
-    return this.request('/transport/promote', {
-      method: 'POST',
-      body: JSON.stringify({
-        transport_id: transportId,
-        source_system: sourceSystem,
-        target_system: targetSystem,
-        promoted_by: promotedBy,
-      }),
-    });
-  }
-
-  async getTransportDetails(transportId: string): Promise<TransportRecord> {
-    return this.request(`/transport/${transportId}`);
-  }
-
-  async validateTransport(transportId: string): Promise<any> {
-    return this.request(`/transport/validate?transport_id=${transportId}`, {
-      method: 'POST',
-    });
-  }
-
-  async getSystemHealth(): Promise<SystemHealth> {
-    return this.request('/health/system');
-  }
-
-  async getHealthHistory(limit: number = 50): Promise<any[]> {
-    return this.request(`/health/history?limit=${limit}`);
-  }
-}
-
-export const api = new APIClient();
+  },
+  getSystemHealth: () => safeFetch<SystemHealth>(`${BASE_URL}/health/system`),
+  getHealthHistory: (limit?: number) => {
+    const url = limit ? `${BASE_URL}/health/history?limit=${limit}` : `${BASE_URL}/health/history`;
+    return safeFetch<any[]>(url);
+  },
+  getTransportDetails: (transportId: string) => safeFetch<TransportRecord>(`${BASE_URL}/transport/${transportId}`),
+  validateTransport: (transportId: string) => safeFetch<any>(`${BASE_URL}/transport/validate?transport_id=${transportId}`, {
+    method: 'POST',
+  }),
+};

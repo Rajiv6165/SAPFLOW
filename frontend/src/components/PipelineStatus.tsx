@@ -13,17 +13,70 @@ export default function PipelineStatus({ wsData }: PipelineStatusProps) {
   const [httpData, setHttpData] = useState<PipelineData[]>([]);
   const [selectedRun, setSelectedRun] = useState<PipelineData | null>(null);
   const [showPanel, setShowPanel] = useState(false);
-
-  const displayData = wsData ?? (wsPipelineData.length > 0 ? wsPipelineData : httpData);
+  const [loading, setLoading] = useState(true);
+  const [error, setError] = useState(false);
 
   useEffect(() => {
-    if (!isConnected) {
-      api
-        .getPipelineStatus()
-        .then((response) => setHttpData(response.last_runs))
-        .catch(() => {});
-    }
-  }, [isConnected]);
+    setLoading(true);
+    api.getPipelineStatus()
+      .then((response) => {
+        if (response && response.last_runs) {
+          setHttpData(response.last_runs);
+          setError(false);
+        } else {
+          setError(true);
+        }
+      })
+      .catch(() => setError(true))
+      .finally(() => setLoading(false));
+  }, []);
+
+  const actualLoading = loading && (!isConnected || !wsPipelineData);
+  const actualError = error && !isConnected;
+
+  const displayData = wsData ?? (wsPipelineData?.recent_runs ?? httpData);
+
+  if (actualLoading) {
+    return (
+      <div className="glass-card p-6 h-full flex flex-col">
+        <div className="mb-5">
+          <p className="section-title mb-1">CI/CD PIPELINE</p>
+          <h3 className="card-title">Pipeline Status</h3>
+        </div>
+        <div className="space-y-3 flex-1">
+          {[1, 2, 3, 4, 5].map((i) => (
+            <div key={i} className="flex items-center gap-3 p-3 rounded-xl bg-slate-900/40 border border-slate-800 animate-pulse">
+              <div className="flex-1 space-y-2">
+                <div className="h-4 bg-slate-800/80 rounded w-1/3" />
+                <div className="h-3 bg-slate-800/60 rounded w-1/4" />
+              </div>
+              <div className="h-6 bg-slate-800 rounded w-16" />
+            </div>
+          ))}
+        </div>
+      </div>
+    );
+  }
+
+  if (actualError) {
+    return (
+      <div className="glass-card p-6 h-full flex flex-col">
+        <div className="mb-5">
+          <p className="section-title mb-1">CI/CD PIPELINE</p>
+          <h3 className="card-title">Pipeline Status</h3>
+        </div>
+        <div className="flex-1 flex flex-col items-center justify-center py-12 gap-3">
+          <div className="w-12 h-12 rounded-full flex items-center justify-center" style={{ background: 'rgba(239,68,68,0.1)' }}>
+            <svg className="w-6 h-6" fill="none" viewBox="0 0 24 24" stroke="#ef4444">
+              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1.5} d="M12 9v2m0 4h.01m-6.938 4h13.856c1.54 0 2.502-1.667 1.732-2.5L13.732 4c-.77-.833-1.964-.833-2.732 0L4.082 16.5C3.312 18.333 4.274 20 5.814 20z" />
+            </svg>
+          </div>
+          <p className="text-sm font-semibold" style={{ color: '#e2e8f0' }}>Backend offline</p>
+          <p className="text-xs text-center" style={{ color: '#64748b' }}>Backend offline — start docker-compose</p>
+        </div>
+      </div>
+    );
+  }
 
   const getStatusBadge = (status: string) => {
     switch (status) {

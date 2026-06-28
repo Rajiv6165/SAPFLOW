@@ -17,7 +17,7 @@ interface DashboardStats {
 }
 
 export default function Home() {
-  const { isConnected, lastUpdated } = usePipelineWebSocket();
+  const { data: wsData, isConnected, lastUpdated } = usePipelineWebSocket();
   const [stats, setStats] = useState<DashboardStats>({
     totalRunsToday: 0,
     successRate: 0,
@@ -38,21 +38,21 @@ export default function Home() {
         let runsToday = 0;
         let successCount = 0;
 
-        if (pipelineData.status === 'fulfilled') {
-          const todaysRuns = pipelineData.value.last_runs.filter(
-            (r) => new Date(r.triggered_at).toDateString() === today
+        if (pipelineData.status === 'fulfilled' && pipelineData.value) {
+          const todaysRuns = (pipelineData.value.last_runs || []).filter(
+            (r: any) => new Date(r.triggered_at).toDateString() === today
           );
           runsToday = todaysRuns.length;
-          successCount = todaysRuns.filter((r) => r.status === 'success').length;
+          successCount = todaysRuns.filter((r: any) => r.status === 'success').length;
         }
 
         const activeCount =
-          transportsData.status === 'fulfilled'
-            ? transportsData.value.transports.length
+          transportsData.status === 'fulfilled' && transportsData.value
+            ? (transportsData.value.transports || []).length
             : 0;
 
         const sysStatus =
-          healthData.status === 'fulfilled' ? healthData.value.status : 'unknown';
+          healthData.status === 'fulfilled' && healthData.value ? healthData.value.status : 'unknown';
 
         setStats({
           totalRunsToday: runsToday,
@@ -70,13 +70,20 @@ export default function Home() {
     return () => clearInterval(interval);
   }, []);
 
+  const totalRuns = wsData ? wsData.summary.total_runs_today : stats.totalRunsToday;
+  const successRate = wsData ? wsData.summary.success_rate : stats.successRate;
+  const activeTransports = wsData ? wsData.summary.active_transports : stats.activeTransports;
+  const systemStatus = wsData ? wsData.summary.system_status : stats.systemStatus;
+  const isLoading = !wsData;
+
   const systemStatusConfig = {
     healthy: { label: 'All Systems Operational', color: '#10b981', bg: 'rgba(16,185,129,0.12)', border: 'rgba(16,185,129,0.25)' },
     degraded: { label: 'Degraded Performance',   color: '#f59e0b', bg: 'rgba(245,158,11,0.12)', border: 'rgba(245,158,11,0.25)' },
     down:     { label: 'System Down',             color: '#ef4444', bg: 'rgba(239,68,68,0.12)',  border: 'rgba(239,68,68,0.25)'  },
     unknown:  { label: 'Connecting...',           color: '#94a3b8', bg: 'rgba(148,163,184,0.1)', border: 'rgba(148,163,184,0.15)'},
   };
-  const statusCfg = systemStatusConfig[stats.systemStatus];
+  const currentStatus = isLoading ? 'unknown' : systemStatus;
+  const statusCfg = systemStatusConfig[currentStatus as keyof typeof systemStatusConfig] || systemStatusConfig.unknown;
 
   return (
     <div className="space-y-6 animate-fade-in">
@@ -112,7 +119,7 @@ export default function Home() {
                 animation: isConnected ? 'pulse-glow 2s ease-in-out infinite' : 'none',
               }}
             />
-            {isConnected ? 'Live WebSocket' : 'HTTP Fallback'}
+            {isConnected ? 'Live' : 'Connecting...'}
           </div>
           {/* Last Updated */}
           {lastUpdated && (
@@ -141,9 +148,13 @@ export default function Home() {
             </span>
           </div>
           <div className="mt-2">
-            <p className="stat-tile-value" style={{ color: '#6366f1' }}>
-              {stats.totalRunsToday}
-            </p>
+            {isLoading ? (
+              <div className="h-8 w-16 bg-slate-800/80 rounded animate-pulse my-1" />
+            ) : (
+              <p className="stat-tile-value" style={{ color: '#6366f1' }}>
+                {totalRuns}
+              </p>
+            )}
             <p className="stat-tile-label">Total Runs Today</p>
           </div>
         </div>
@@ -162,17 +173,21 @@ export default function Home() {
             <span
               className="text-xs font-medium px-2 py-0.5 rounded-full"
               style={{
-                background: stats.successRate >= 80 ? 'rgba(16,185,129,0.1)' : 'rgba(239,68,68,0.1)',
-                color: stats.successRate >= 80 ? '#34d399' : '#f87171',
+                background: successRate >= 80 ? 'rgba(16,185,129,0.1)' : 'rgba(239,68,68,0.1)',
+                color: successRate >= 80 ? '#34d399' : '#f87171',
               }}
             >
-              {stats.successRate >= 80 ? '▲ Good' : '▼ Low'}
+              {successRate >= 80 ? '▲ Good' : '▼ Low'}
             </span>
           </div>
           <div className="mt-2">
-            <p className="stat-tile-value" style={{ color: stats.successRate >= 80 ? '#10b981' : '#ef4444' }}>
-              {stats.successRate}%
-            </p>
+            {isLoading ? (
+              <div className="h-8 w-16 bg-slate-800/80 rounded animate-pulse my-1" />
+            ) : (
+              <p className="stat-tile-value" style={{ color: successRate >= 80 ? '#10b981' : '#ef4444' }}>
+                {successRate}%
+              </p>
+            )}
             <p className="stat-tile-label">Success Rate</p>
           </div>
         </div>
@@ -193,9 +208,13 @@ export default function Home() {
             </span>
           </div>
           <div className="mt-2">
-            <p className="stat-tile-value" style={{ color: '#3b82f6' }}>
-              {stats.activeTransports}
-            </p>
+            {isLoading ? (
+              <div className="h-8 w-16 bg-slate-800/80 rounded animate-pulse my-1" />
+            ) : (
+              <p className="stat-tile-value" style={{ color: '#3b82f6' }}>
+                {activeTransports}
+              </p>
+            )}
             <p className="stat-tile-label">Active Transports</p>
           </div>
         </div>
@@ -221,9 +240,13 @@ export default function Home() {
             />
           </div>
           <div className="mt-2">
-            <p className="stat-tile-value text-xl" style={{ color: statusCfg.color }}>
-              {stats.systemStatus === 'unknown' ? '—' : stats.systemStatus.charAt(0).toUpperCase() + stats.systemStatus.slice(1)}
-            </p>
+            {isLoading ? (
+              <div className="h-8 w-24 bg-slate-800/80 rounded animate-pulse my-1" />
+            ) : (
+              <p className="stat-tile-value text-xl" style={{ color: statusCfg.color }}>
+                {systemStatus === 'unknown' ? '—' : systemStatus.charAt(0).toUpperCase() + systemStatus.slice(1)}
+              </p>
+            )}
             <p className="stat-tile-label">{statusCfg.label}</p>
           </div>
         </div>
