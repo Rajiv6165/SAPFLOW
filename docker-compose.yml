@@ -54,6 +54,8 @@ services:
       SNS_ALERT_TOPIC_ARN: ${SNS_ALERT_TOPIC_ARN}
       GITHUB_TOKEN: ${GITHUB_TOKEN}
       GITHUB_REPO: ${GITHUB_REPO}
+      GITHUB_WEBHOOK_SECRET: ${GITHUB_WEBHOOK_SECRET}
+      PIPELINE_SYNC_INTERVAL: ${PIPELINE_SYNC_INTERVAL:-60}
     volumes:
       - ./backend:/backend
     depends_on:

@@ -4,9 +4,10 @@ from sqlalchemy.ext.asyncio import create_async_engine, AsyncSession
 from backend.models.database import Base, PipelineRun, SystemHealthSnapshot
 from backend.core.config import settings
 from backend.core.websocket_manager import manager
-from backend.routers import pipeline, transport, health
+from backend.routers import pipeline, transport, health, webhooks
 from backend.services.sap_btp import SAPBTPService
 from backend.services.aws_alerts import AWSAlertsService
+from backend.services.github_service import GitHubService
 import asyncio
 import logging
 from datetime import datetime
@@ -27,6 +28,7 @@ app.add_middleware(
 app.include_router(pipeline.router)
 app.include_router(transport.router)
 app.include_router(health.router)
+app.include_router(webhooks.router, prefix="/webhooks", tags=["webhooks"])
 
 sap_service = SAPBTPService()
 aws_service = AWSAlertsService()
@@ -44,8 +46,11 @@ async def startup_event():
     logger.info("Database tables created successfully")
     await engine.dispose()
     
+    app.state.github = GitHubService()
+    
     asyncio.create_task(poll_system_health())
     asyncio.create_task(broadcast_pipeline_status())
+    asyncio.create_task(sync_pipeline_from_github())
 
 
 async def poll_system_health():
@@ -84,6 +89,28 @@ async def broadcast_pipeline_status():
             logger.error(f"Error broadcasting pipeline status: {e}")
         
         await asyncio.sleep(5)
+
+
+async def sync_pipeline_from_github():
+    while True:
+        try:
+            db_url = settings.DATABASE_URL
+            if db_url.startswith("postgresql://"):
+                db_url = db_url.replace("postgresql://", "postgresql+asyncpg://", 1)
+                
+            engine = create_async_engine(db_url, echo=False)
+            async with AsyncSession(engine) as session:
+                github_service = getattr(app.state, "github", None)
+                if github_service:
+                    synced = await github_service.sync_runs_to_db(session)
+                    if synced > 0:
+                        logger.info(f"Synced {synced} pipeline runs from GitHub. Broadcasting update.")
+                        await manager.broadcast()
+            await engine.dispose()
+        except Exception as e:
+            logger.warning(f"Error syncing pipeline from GitHub: {e}")
+            
+        await asyncio.sleep(settings.PIPELINE_SYNC_INTERVAL)
 
 
 @app.websocket("/ws/pipeline")

@@ -5,6 +5,8 @@ import { api, PipelineMetrics } from '@/lib/api';
 import {
   BarChart,
   Bar,
+  LineChart,
+  Line,
   XAxis,
   YAxis,
   Tooltip,
@@ -13,6 +15,32 @@ import {
   TooltipProps,
 } from 'recharts';
 import { ValueType, NameType } from 'recharts/types/component/DefaultTooltipContent';
+
+const DurationTooltip = ({ active, payload, label }: TooltipProps<ValueType, NameType>) => {
+  if (active && payload && payload.length) {
+    const data = payload[0].payload;
+    return (
+      <div
+        className="px-4 py-3 rounded-xl text-xs"
+        style={{
+          background: 'rgba(15, 23, 42, 0.95)',
+          border: '1px solid rgba(99, 102, 241, 0.25)',
+          boxShadow: '0 8px 24px rgba(0, 0, 0, 0.4)',
+          backdropFilter: 'blur(20px)',
+          color: '#e2e8f0',
+        }}
+      >
+        <p className="font-semibold mb-1.5" style={{ color: '#94a3b8' }}>Run {label}</p>
+        <div className="space-y-1">
+          <p><span style={{ color: '#64748b' }}>Branch:</span> <span className="font-bold text-slate-200">{data.branch}</span></p>
+          <p><span style={{ color: '#6366f1' }}>Duration:</span> <span className="font-bold" style={{ color: '#818cf8' }}>{data.duration}s</span></p>
+          <p><span style={{ color: '#64748b' }}>Status:</span> <span className={`font-semibold ${data.status === 'success' ? 'text-emerald-500' : 'text-rose-500'}`}>{data.status.toUpperCase()}</span></p>
+        </div>
+      </div>
+    );
+  }
+  return null;
+};
 
 interface ChartPoint {
   date: string;
@@ -68,20 +96,24 @@ const CustomTooltip = ({ active, payload, label }: TooltipProps<ValueType, NameT
 
 export default function MetricsChart() {
   const [metrics, setMetrics] = useState<PipelineMetrics[]>([]);
+  const [runs, setRuns] = useState<any[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState(false);
 
   useEffect(() => {
     setLoading(true);
-    api
-      .getPipelineMetrics()
-      .then((data) => {
-        if (data) {
-          setMetrics(data);
-          setError(false);
-        } else {
-          setError(true);
+    Promise.all([
+      api.getPipelineMetrics(),
+      api.getPipelineStatus()
+    ])
+      .then(([metricsData, statusData]) => {
+        if (metricsData) {
+          setMetrics(metricsData);
         }
+        if (statusData && statusData.last_runs) {
+          setRuns(statusData.last_runs);
+        }
+        setError(false);
       })
       .catch(() => setError(true))
       .finally(() => setLoading(false));
@@ -116,6 +148,16 @@ export default function MetricsChart() {
     total: m.success + m.failed,
     passRate: ((m.success / Math.max(m.success + m.failed, 1)) * 100).toFixed(1),
   }));
+
+  const trendData = [...runs]
+    .reverse()
+    .slice(-10)
+    .map((run) => ({
+      name: run.run_id.startsWith('run-') ? '#' + run.run_id.substring(4) : run.run_id,
+      duration: run.duration_seconds || 0,
+      branch: run.branch,
+      status: run.status
+    }));
 
   const totalRuns    = chartData.reduce((s, d) => s + d.total, 0);
   const totalSuccess = chartData.reduce((s, d) => s + d.success, 0);
@@ -187,6 +229,72 @@ export default function MetricsChart() {
               <Bar dataKey="success" fill="#10b981" radius={[3, 3, 0, 0]} stackId="a" />
               <Bar dataKey="failed"  fill="#ef4444" radius={[3, 3, 0, 0]} stackId="a" />
             </BarChart>
+          </ResponsiveContainer>
+        )}
+      </div>
+
+      {/* Divider */}
+      <div className="h-[1px] bg-slate-800/80 my-8" />
+
+      {/* Header 2 */}
+      <div className="flex items-center justify-between mb-5">
+        <div>
+          <p className="section-title mb-1">PERFORMANCE</p>
+          <h3 className="card-title">Pipeline Duration Trend — Last 10 Runs</h3>
+        </div>
+      </div>
+
+      {/* Line Chart */}
+      <div className="h-64 mb-10">
+        {loading ? (
+          <div className="h-full flex items-center justify-center">
+            <div className="flex items-center gap-3">
+              <svg className="w-5 h-5 animate-spin" fill="none" viewBox="0 0 24 24" style={{ color: '#6366f1' }}>
+                <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4" />
+                <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4z" />
+              </svg>
+              <span className="text-sm" style={{ color: '#475569' }}>Loading trend...</span>
+            </div>
+          </div>
+        ) : trendData.length === 0 ? (
+          <div className="h-full flex flex-col items-center justify-center gap-3">
+            <div className="w-12 h-12 rounded-full flex items-center justify-center" style={{ background: 'rgba(99,102,241,0.1)' }}>
+              <svg className="w-6 h-6" fill="none" viewBox="0 0 24 24" stroke="#6366f1">
+                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1.5} d="M9 19v-6a2 2 0 00-2-2H5a2 2 0 00-2 2v6a2 2 0 002 2h2a2 2 0 002-2zm0 0V9a2 2 0 012-2h2a2 2 0 012 2v10m-6 0a2 2 0 002 2h2a2 2 0 002-2m0 0V5a2 2 0 012-2h2a2 2 0 012 2v14a2 2 0 01-2 2h-2a2 2 0 01-2-2z" />
+              </svg>
+            </div>
+            <p className="text-sm" style={{ color: '#475569' }}>No trend data yet</p>
+          </div>
+        ) : (
+          <ResponsiveContainer width="100%" height="100%">
+            <LineChart data={trendData}>
+              <CartesianGrid
+                strokeDasharray="3 3"
+                vertical={false}
+                stroke="rgba(99,102,241,0.08)"
+              />
+              <XAxis
+                dataKey="name"
+                tick={{ fontSize: 11, fill: '#475569', fontFamily: 'Inter' }}
+                axisLine={{ stroke: 'rgba(99,102,241,0.1)' }}
+                tickLine={false}
+              />
+              <YAxis
+                tick={{ fontSize: 11, fill: '#475569', fontFamily: 'Inter' }}
+                axisLine={false}
+                tickLine={false}
+                width={30}
+              />
+              <Tooltip content={<DurationTooltip />} />
+              <Line
+                type="monotone"
+                dataKey="duration"
+                stroke="#6366f1"
+                strokeWidth={2.5}
+                dot={{ fill: '#6366f1', strokeWidth: 1.5, r: 4 }}
+                activeDot={{ r: 6 }}
+              />
+            </LineChart>
           </ResponsiveContainer>
         )}
       </div>

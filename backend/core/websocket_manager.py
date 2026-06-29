@@ -3,6 +3,7 @@ from typing import List
 import json
 import logging
 from datetime import datetime, time
+from uuid import uuid4
 from sqlalchemy import select, func
 from sqlalchemy.ext.asyncio import create_async_engine, AsyncSession
 from backend.core.config import settings
@@ -14,6 +15,19 @@ logger = logging.getLogger(__name__)
 class ConnectionManager:
     def __init__(self):
         self.active_connections: List[WebSocket] = []
+        self.event_log: List[dict] = []  # max 20 events, newest first
+
+    def add_event(self, event_type: str, message: str, branch: str = None, transport_id: str = None):
+        event = {
+            "id": str(uuid4()),
+            "type": event_type,  # PUSH / PIPELINE_STARTED / PIPELINE_PASSED / PIPELINE_FAILED / TRANSPORT_PROMOTED
+            "message": message,
+            "branch": branch,
+            "transport_id": transport_id,
+            "timestamp": datetime.utcnow().isoformat()
+        }
+        self.event_log.insert(0, event)
+        self.event_log = self.event_log[:20]  # keep last 20
 
     async def connect(self, websocket: WebSocket):
         await websocket.accept()
@@ -96,12 +110,16 @@ class ConnectionManager:
                                 "triggered_at": run.triggered_at.isoformat()
                             }
                             for run in recent_runs
-                        ]
+                        ],
+                        "events": self.event_log
                     }
                 await engine.dispose()
             except Exception as e:
                 logger.error(f"Error querying database for WebSocket broadcast: {e}")
                 return
+
+        if isinstance(message, dict):
+            message.setdefault("events", self.event_log)
 
         disconnected = []
         for connection in self.active_connections:

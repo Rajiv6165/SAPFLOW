@@ -1,7 +1,8 @@
-from fastapi import APIRouter, HTTPException, Depends
+from fastapi import APIRouter, HTTPException, Depends, Request
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy import select, func
 from backend.models.database import PipelineRun
+from backend.models.schemas import PipelineTriggerRequest
 from backend.core.config import settings
 from sqlalchemy.ext.asyncio import create_async_engine
 import httpx
@@ -20,7 +21,7 @@ async def get_db():
 
 
 @router.get("/status")
-async def get_pipeline_status(db: AsyncSession = Depends(get_db)):
+async def get_pipeline_status(request: Request, db: AsyncSession = Depends(get_db)):
     try:
         result = await db.execute(
             select(PipelineRun)
@@ -29,21 +30,33 @@ async def get_pipeline_status(db: AsyncSession = Depends(get_db)):
         )
         runs = result.scalars().all()
         
+        github_service = getattr(request.app.state, "github", None)
+        
+        last_runs = []
+        for i, run in enumerate(runs):
+            jobs = []
+            if i < 3 and github_service:
+                try:
+                    raw_jobs = await github_service.get_run_jobs(run.run_id)
+                    jobs = [{"name": j["name"], "status": j["status"]} for j in raw_jobs]
+                except Exception as je:
+                    logger.error(f"Error fetching jobs for run {run.run_id}: {je}")
+            
+            last_runs.append({
+                "run_id": run.run_id,
+                "branch": run.branch,
+                "commit_sha": run.commit_sha,
+                "status": run.status,
+                "triggered_at": run.triggered_at.isoformat(),
+                "completed_at": run.completed_at.isoformat() if run.completed_at else None,
+                "duration_seconds": run.duration_seconds,
+                "transport_id": run.transport_id,
+                "jobs": jobs
+            })
+            
         return {
             "current_status": runs[0].status if runs else "idle",
-            "last_runs": [
-                {
-                    "run_id": run.run_id,
-                    "branch": run.branch,
-                    "commit_sha": run.commit_sha,
-                    "status": run.status,
-                    "triggered_at": run.triggered_at.isoformat(),
-                    "completed_at": run.completed_at.isoformat() if run.completed_at else None,
-                    "duration_seconds": run.duration_seconds,
-                    "transport_id": run.transport_id
-                }
-                for run in runs
-            ]
+            "last_runs": last_runs
         }
     except Exception as e:
         logger.error(f"Error fetching pipeline status: {e}")
@@ -80,26 +93,44 @@ async def get_pipeline_run(run_id: str, db: AsyncSession = Depends(get_db)):
 
 
 @router.post("/trigger")
-async def trigger_pipeline(branch: str = "main"):
-    if not settings.GITHUB_TOKEN or not settings.GITHUB_REPO:
-        raise HTTPException(status_code=400, detail="GitHub credentials not configured")
-    
-    try:
-        owner, repo = settings.GITHUB_REPO.split("/")
-        async with httpx.AsyncClient() as client:
-            response = await client.post(
-                f"https://api.github.com/repos/{owner}/{repo}/actions/workflows/ci.yml/dispatches",
-                json={"ref": branch},
-                headers={
-                    "Authorization": f"token {settings.GITHUB_TOKEN}",
-                    "Accept": "application/vnd.github.v3+json"
-                }
-            )
-            response.raise_for_status()
+async def trigger_pipeline(request: Request, payload: PipelineTriggerRequest):
+    github_service = getattr(request.app.state, "github", None)
+    if not github_service:
+        raise HTTPException(status_code=500, detail="GitHub service not available")
         
-        return {"message": f"Pipeline triggered on branch {branch}", "branch": branch}
+    branch = payload.branch
+    success = await github_service.trigger_workflow("ci.yml", branch)
+    if not success:
+        raise HTTPException(status_code=500, detail=f"Failed to trigger pipeline for branch {branch}")
+        
+    return {"message": f"Pipeline triggered on branch {branch}", "branch": branch}
+
+
+@router.post("/sync")
+async def sync_pipeline(request: Request, db: AsyncSession = Depends(get_db)):
+    github_service = getattr(request.app.state, "github", None)
+    if not github_service:
+        raise HTTPException(status_code=500, detail="GitHub service not available")
+        
+    try:
+        synced_count = await github_service.sync_runs_to_db(db)
+        return {"synced": synced_count, "message": f"Synced {synced_count} runs from GitHub"}
     except Exception as e:
-        logger.error(f"Error triggering pipeline: {e}")
+        logger.error(f"Error during manual sync: {e}")
+        raise HTTPException(status_code=500, detail=str(e))
+
+
+@router.get("/runs/{run_id}/jobs")
+async def get_run_jobs(run_id: str, request: Request):
+    github_service = getattr(request.app.state, "github", None)
+    if not github_service:
+        raise HTTPException(status_code=500, detail="GitHub service not available")
+        
+    try:
+        jobs = await github_service.get_run_jobs(run_id)
+        return jobs
+    except Exception as e:
+        logger.error(f"Error fetching jobs for run {run_id}: {e}")
         raise HTTPException(status_code=500, detail=str(e))
 
 

@@ -2,10 +2,12 @@
 
 import { useState, useEffect, useCallback } from 'react';
 import { api } from '@/lib/api';
+import { usePipelineWebSocket } from '@/lib/websocket';
 
 interface Alert {
   id: string;
   type: 'error' | 'warning' | 'success' | 'info';
+  rawType: string;
   title: string;
   message: string;
   timestamp: string;
@@ -14,65 +16,70 @@ interface Alert {
 
 const MOCK_ALERTS: Alert[] = [
   {
-    id: '1',
+    id: 'mock-1',
     type: 'error',
+    rawType: 'PIPELINE_FAILED',
     title: 'Pipeline Failed',
     message: 'Transport DEVK900001 failed ABAP inspection in QA. Severity: ERROR — 3 findings.',
     timestamp: new Date(Date.now() - 300_000).toISOString(),
-    source: 'CI Pipeline',
+    source: 'Branch: develop',
   },
   {
-    id: '2',
+    id: 'mock-2',
     type: 'warning',
-    title: 'High CPU Usage',
+    rawType: 'PIPELINE_STARTED',
+    title: 'Pipeline Started',
     message: 'SAP system CPU exceeded 90% threshold for 5+ minutes. CloudWatch alarm active.',
     timestamp: new Date(Date.now() - 600_000).toISOString(),
-    source: 'CloudWatch',
+    source: 'Branch: main',
   },
   {
-    id: '3',
+    id: 'mock-3',
     type: 'success',
+    rawType: 'TRANSPORT_PROMOTED',
     title: 'Transport Promoted',
     message: 'DEVK900002 successfully imported into QA. 14 objects transported.',
     timestamp: new Date(Date.now() - 900_000).toISOString(),
-    source: 'Transport Manager',
-  },
-  {
-    id: '4',
-    type: 'info',
-    title: 'Scheduled Maintenance',
-    message: 'SAP system maintenance window starts in 1 hour. Plan transports accordingly.',
-    timestamp: new Date(Date.now() - 1_800_000).toISOString(),
-    source: 'Operations',
+    source: 'Transport: DEVK900002',
   },
 ];
 
 const alertConfig = {
-  error:   { iconColor: '#ef4444', className: 'alert-error',   label: 'ERROR' },
-  warning: { iconColor: '#f59e0b', className: 'alert-warning', label: 'WARN'  },
+  error:   { iconColor: '#ef4444', className: 'alert-error',   label: 'FAIL' },
+  warning: { iconColor: '#f59e0b', className: 'alert-warning', label: 'RUN'  },
   success: { iconColor: '#10b981', className: 'alert-success', label: 'OK'    },
-  info:    { iconColor: '#3b82f6', className: 'alert-info',    label: 'INFO'  },
+  info:    { iconColor: '#3b82f6', className: 'alert-info',    label: 'PUSH'  },
 };
 
-function AlertIcon({ type, className = 'w-4 h-4' }: { type: Alert['type']; className?: string }) {
-  const color = alertConfig[type].iconColor;
-  if (type === 'error') return (
-    <svg className={className} fill="none" viewBox="0 0 24 24" stroke={color}>
-      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 9v2m0 4h.01M10.29 3.86L1.82 18a2 2 0 001.71 3h16.94a2 2 0 001.71-3L13.71 3.86a2 2 0 00-3.42 0z" />
+function EventIcon({ type, className = 'w-4 h-4' }: { type: string; className?: string }) {
+  if (type === 'PUSH') return (
+    <svg className={className} fill="none" viewBox="0 0 24 24" stroke="#3b82f6">
+      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M10 20l4-16m4 4l4 4-4 4M6 16l-4-4 4-4" />
     </svg>
   );
-  if (type === 'warning') return (
-    <svg className={className} fill="none" viewBox="0 0 24 24" stroke={color}>
-      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 9v2m0 4h.01M10.29 3.86L1.82 18a2 2 0 001.71 3h16.94a2 2 0 001.71-3L13.71 3.86a2 2 0 00-3.42 0z" />
+  if (type === 'PIPELINE_STARTED') return (
+    <svg className={`${className} animate-pulse`} fill="none" viewBox="0 0 24 24" stroke="#f59e0b">
+      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M14.752 11.168l-3.197-2.132A1 1 0 0010 9.87v4.263a1 1 0 001.555.832l3.197-2.132a1 1 0 000-1.664z" />
+      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M21 12a9 9 0 11-18 0 9 9 0 0118 0z" />
     </svg>
   );
-  if (type === 'success') return (
-    <svg className={className} fill="none" viewBox="0 0 24 24" stroke={color}>
+  if (type === 'PIPELINE_PASSED') return (
+    <svg className={className} fill="none" viewBox="0 0 24 24" stroke="#10b981">
       <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 12l2 2 4-4m6 2a9 9 0 11-18 0 9 9 0 0118 0z" />
     </svg>
   );
+  if (type === 'PIPELINE_FAILED') return (
+    <svg className={className} fill="none" viewBox="0 0 24 24" stroke="#ef4444">
+      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M10 14l2-2m0 0l2-2m-2 2l-2-2m2 2l2 2m7-2a9 9 0 11-18 0 9 9 0 0118 0z" />
+    </svg>
+  );
+  if (type === 'TRANSPORT_PROMOTED') return (
+    <svg className={className} fill="none" viewBox="0 0 24 24" stroke="#10b981">
+      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1.5} d="M20.354 15.354A9 9 0 018.646 3.646m.146 11.646L21 2.1l-7.243 7.243M18.75 6.25l-2.5 2.5" />
+    </svg>
+  );
   return (
-    <svg className={className} fill="none" viewBox="0 0 24 24" stroke={color}>
+    <svg className={className} fill="none" viewBox="0 0 24 24" stroke="#3b82f6">
       <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M13 16h-1v-4h-1m1-4h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z" />
     </svg>
   );
@@ -89,27 +96,92 @@ function formatRelTime(dateString: string): string {
 }
 
 export default function AlertFeed() {
+  const { data: wsData } = usePipelineWebSocket();
   const [alerts, setAlerts] = useState<Alert[]>([]);
   const [dismissed, setDismissed] = useState<Set<string>>(new Set());
   const [isExpanded, setIsExpanded] = useState(false);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState(false);
   const [, forceUpdate] = useState(0);
+  const [lastSeenEventId, setLastSeenEventId] = useState<string | null>(null);
+  const [flashEventId, setFlashEventId] = useState<string | null>(null);
 
   useEffect(() => {
     setLoading(true);
     api.getSystemHealth()
       .then((data) => {
         if (data) {
-          setAlerts(MOCK_ALERTS);
           setError(false);
+          if (!wsData?.events) {
+            setAlerts(MOCK_ALERTS);
+            setLoading(false);
+          }
         } else {
           setError(true);
+          setLoading(false);
         }
       })
-      .catch(() => setError(true))
-      .finally(() => setLoading(false));
+      .catch(() => {
+        setError(true);
+        setLoading(false);
+      });
   }, []);
+
+  useEffect(() => {
+    if (wsData?.events) {
+      const mappedEvents: Alert[] = wsData.events.map((e: any) => {
+        let type: Alert['type'] = 'info';
+        let title = '';
+        
+        switch (e.type) {
+          case 'PUSH':
+            type = 'info';
+            title = 'Commit Pushed';
+            break;
+          case 'PIPELINE_STARTED':
+            type = 'warning';
+            title = 'Pipeline Started';
+            break;
+          case 'PIPELINE_PASSED':
+            type = 'success';
+            title = 'Pipeline Passed';
+            break;
+          case 'PIPELINE_FAILED':
+            type = 'error';
+            title = 'Pipeline Failed';
+            break;
+          case 'TRANSPORT_PROMOTED':
+            type = 'success';
+            title = 'Transport Promoted';
+            break;
+          default:
+            type = 'info';
+            title = 'System Event';
+        }
+
+        return {
+          id: e.id,
+          type,
+          rawType: e.type,
+          title,
+          message: e.message,
+          timestamp: e.timestamp,
+          source: e.branch ? `Branch: ${e.branch}` : (e.transport_id ? `Transport: ${e.transport_id}` : 'System'),
+        };
+      });
+      
+      if (mappedEvents.length > 0) {
+        const newestEventId = mappedEvents[0].id;
+        if (lastSeenEventId && newestEventId !== lastSeenEventId) {
+          setFlashEventId(newestEventId);
+          setTimeout(() => setFlashEventId(null), 2000);
+        }
+        setLastSeenEventId(newestEventId);
+      }
+      
+      setAlerts(mappedEvents);
+    }
+  }, [wsData]);
 
   // Refresh relative timestamps every 30s
   useEffect(() => {
@@ -248,54 +320,71 @@ export default function AlertFeed() {
               </div>
             ) : (
               <div className="p-3 space-y-2">
-                {visible.map((alert) => (
-                  <div key={alert.id} className={`alert-item ${alertConfig[alert.type].className}`}>
-                    {/* Dismiss Button */}
-                    <button
-                      onClick={() => dismissAlert(alert.id)}
-                      className="absolute top-2.5 right-2.5 w-5 h-5 rounded flex items-center justify-center transition-colors"
-                      style={{ color: '#64748b' }}
-                      onMouseEnter={(e) => ((e.currentTarget as HTMLElement).style.color = '#94a3b8')}
-                      onMouseLeave={(e) => ((e.currentTarget as HTMLElement).style.color = '#64748b')}
+                <style>{`
+                  @keyframes flash-highlight {
+                    0% { background-color: rgba(99, 102, 241, 0.4); }
+                    100% { background-color: rgba(15, 23, 42, 0.5); }
+                  }
+                `}</style>
+                {visible.map((alert) => {
+                  const isNew = alert.id === flashEventId;
+                  return (
+                    <div
+                      key={alert.id}
+                      className={`alert-item ${alertConfig[alert.type].className}`}
+                      style={isNew ? {
+                        animation: 'flash-highlight 2s ease-out',
+                        border: '1px solid rgba(99, 102, 241, 0.5)',
+                        boxShadow: '0 0 12px rgba(99, 102, 241, 0.3)'
+                      } : undefined}
                     >
-                      <svg className="w-3.5 h-3.5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" />
-                      </svg>
-                    </button>
+                      {/* Dismiss Button */}
+                      <button
+                        onClick={() => dismissAlert(alert.id)}
+                        className="absolute top-2.5 right-2.5 w-5 h-5 rounded flex items-center justify-center transition-colors"
+                        style={{ color: '#64748b' }}
+                        onMouseEnter={(e) => ((e.currentTarget as HTMLElement).style.color = '#94a3b8')}
+                        onMouseLeave={(e) => ((e.currentTarget as HTMLElement).style.color = '#64748b')}
+                      >
+                        <svg className="w-3.5 h-3.5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                          <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" />
+                        </svg>
+                      </button>
 
-                    <div className="flex items-start gap-2.5 pr-5">
-                      <AlertIcon type={alert.type} className="w-4 h-4 flex-shrink-0 mt-0.5" />
-                      <div className="flex-1 min-w-0">
-                        <div className="flex items-center justify-between gap-2 mb-0.5">
-                          <p className="text-xs font-semibold truncate" style={{ color: '#e2e8f0' }}>
-                            {alert.title}
+                      <div className="flex items-start gap-2.5 pr-5">
+                        <EventIcon type={alert.rawType} className="w-4 h-4 flex-shrink-0 mt-0.5" />
+                        <div className="flex-1 min-w-0">
+                          <div className="flex items-center justify-between gap-2 mb-0.5">
+                            <p className="text-xs font-semibold truncate" style={{ color: '#e2e8f0' }}>
+                              {alert.title}
+                            </p>
+                            <span
+                              className="flex-shrink-0 text-xs px-1.5 py-0.5 rounded font-bold"
+                              style={{
+                                background: `${alertConfig[alert.type].iconColor}20`,
+                                color: alertConfig[alert.type].iconColor,
+                                fontSize: '9px',
+                              }}
+                            >
+                              {alertConfig[alert.type].label}
+                            </span>
+                          </div>
+                          <p className="text-xs leading-relaxed" style={{ color: '#64748b' }}>
+                            {alert.message}
                           </p>
-                          <span
-                            className="flex-shrink-0 text-xs px-1.5 py-0.5 rounded font-bold"
-                            style={{
-                              background: `${alertConfig[alert.type].iconColor}20`,
-                              color: alertConfig[alert.type].iconColor,
-                              fontSize: '9px',
-                            }}
-                          >
-                            {alertConfig[alert.type].label}
-                          </span>
-                        </div>
-                        <p className="text-xs leading-relaxed" style={{ color: '#64748b' }}>
-                          {alert.message}
-                        </p>
-                        <div className="flex items-center justify-between mt-1.5">
-                          <span className="text-xs" style={{ color: '#334155' }}>
-                            {alert.source}
-                          </span>
-                          <span className="text-xs tabular-nums" style={{ color: '#334155' }}>
-                            {formatRelTime(alert.timestamp)}
-                          </span>
+                          <div className="flex items-center justify-between mt-1.5">
+                            <span className="text-xs" style={{ color: '#334155' }}>
+                              {alert.source}
+                            </span>
+                            <span className="text-xs tabular-nums" style={{ color: '#334155' }}>
+                              {formatRelTime(alert.timestamp)}
+                            </span>
+                          </div>
                         </div>
                       </div>
                     </div>
-                  </div>
-                ))}
+                  );
+                })}
               </div>
             )}
 

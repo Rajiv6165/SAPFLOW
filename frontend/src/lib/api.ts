@@ -92,4 +92,12 @@ export const api = {
   validateTransport: (transportId: string) => safeFetch<any>(`${BASE_URL}/transport/validate?transport_id=${transportId}`, {
     method: 'POST',
   }),
+  getRunJobs: (runId: string) => safeFetch<any>(`${BASE_URL}/pipeline/runs/${runId}/jobs`),
+  syncPipeline: () => safeFetch<any>(`${BASE_URL}/pipeline/sync`, {
+    method: 'POST',
+  }),
+  triggerPipeline: (branch: string) => safeFetch<any>(`${BASE_URL}/pipeline/trigger`, {
+    method: 'POST',
+    body: JSON.stringify({ branch }),
+  }),
 };

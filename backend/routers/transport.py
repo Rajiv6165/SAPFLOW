@@ -93,6 +93,15 @@ async def promote_transport(
             await db.commit()
             await db.refresh(existing_record)
             
+            if existing_record.status == "success":
+                from backend.core.websocket_manager import manager
+                manager.add_event(
+                    event_type="TRANSPORT_PROMOTED",
+                    message=f"Transport {transport_id} promoted to {target_system}",
+                    transport_id=transport_id
+                )
+                await manager.broadcast()
+            
             return {
                 "id": str(existing_record.id),
                 "transport_id": existing_record.transport_id,
@@ -113,6 +122,15 @@ async def promote_transport(
             db.add(new_record)
             await db.commit()
             await db.refresh(new_record)
+            
+            if new_record.status == "success":
+                from backend.core.websocket_manager import manager
+                manager.add_event(
+                    event_type="TRANSPORT_PROMOTED",
+                    message=f"Transport {transport_id} promoted to {target_system}",
+                    transport_id=transport_id
+                )
+                await manager.broadcast()
             
             return {
                 "id": str(new_record.id),

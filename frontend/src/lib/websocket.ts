@@ -23,6 +23,7 @@ export interface WebSocketPayload {
     system_status: 'healthy' | 'degraded' | 'down' | 'unknown';
   };
   recent_runs: PipelineData[];
+  events?: any[];
 }
 
 export function usePipelineWebSocket(url: string = WS_URL) {

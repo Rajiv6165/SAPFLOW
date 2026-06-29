@@ -1,3 +1,11 @@
+# Required GitHub Secrets:
+# SAPFLOW_WEBHOOK_URL  — URL where SAPFlow backend is deployed (e.g. https://your-ngrok-url.ngrok.io)
+# GITHUB_WEBHOOK_SECRET — must match GITHUB_WEBHOOK_SECRET in backend .env
+# AWS_ACCESS_KEY_ID    — for ECR push (Phase 4)
+# AWS_SECRET_ACCESS_KEY — for ECR push (Phase 4)
+# ECR_REGISTRY         — AWS ECR registry URL (Phase 4)
+# SLACK_WEBHOOK_URL    — for Slack notifications (Phase 4)
+
 name: SAPFlow CI Pipeline
 
 on:
@@ -13,7 +21,13 @@ on:
 jobs:
   code-quality:
     runs-on: ubuntu-latest
+    outputs:
+      start_time: ${{ steps.record-start.outputs.start_time }}
     steps:
+      - name: Record start time
+        id: record-start
+        run: echo "start_time=$(date -u +%s)" >> "$GITHUB_OUTPUT"
+
       - name: Checkout code
         uses: actions/checkout@v4
       
@@ -130,3 +144,55 @@ jobs:
             }
         env:
           SLACK_WEBHOOK_URL: ${{ secrets.SLACK_WEBHOOK_URL }}
+
+  report-to-sapflow:
+    needs: [code-quality, abap-validation, docker-build]
+    runs-on: ubuntu-latest
+    if: always()
+    steps:
+      - name: Report pipeline result to SAPFlow
+        run: |
+          START_TIME="${{ needs.code-quality.outputs.start_time }}"
+          END_TIME=$(date -u +%s)
+          DURATION=$((END_TIME - START_TIME))
+          
+          # Determine the overall pipeline conclusion
+          CONCLUSION="success"
+          if [ "${{ needs.code-quality.result }}" = "failure" ] || \
+             [ "${{ needs.abap-validation.result }}" = "failure" ] || \
+             [ "${{ needs.docker-build.result }}" = "failure" ]; then
+            CONCLUSION="failure"
+          elif [ "${{ needs.code-quality.result }}" = "cancelled" ] || \
+               [ "${{ needs.abap-validation.result }}" = "cancelled" ] || \
+               [ "${{ needs.docker-build.result }}" = "cancelled" ]; then
+            CONCLUSION="cancelled"
+          elif [ "${{ needs.code-quality.result }}" = "skipped" ] && \
+               [ "${{ needs.abap-validation.result }}" = "skipped" ] && \
+               [ "${{ needs.docker-build.result }}" = "skipped" ]; then
+            CONCLUSION="skipped"
+          fi
+          
+          PAYLOAD=$(cat <<EOF
+          {
+            "action": "completed",
+            "workflow_run": {
+              "id": ${{ github.run_id }},
+              "name": "${{ github.workflow }}",
+              "status": "completed",
+              "conclusion": "$CONCLUSION",
+              "head_branch": "${{ github.ref_name }}",
+              "head_sha": "${{ github.sha }}",
+              "html_url": "${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}",
+              "duration": $DURATION
+            }
+          }
+          EOF
+          )
+          
+          SIGNATURE=$(echo -n "$PAYLOAD" | openssl dgst -sha256 -hmac "${{ secrets.GITHUB_WEBHOOK_SECRET }}" | cut -d' ' -f2)
+          
+          curl -X POST ${{ secrets.SAPFLOW_WEBHOOK_URL }}/webhooks/github \
+            -H "Content-Type: application/json" \
+            -H "X-Hub-Signature-256: sha256=$SIGNATURE" \
+            -H "X-GitHub-Event: workflow_run" \
+            -d "$PAYLOAD"

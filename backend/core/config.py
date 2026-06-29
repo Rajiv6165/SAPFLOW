@@ -32,8 +32,10 @@ class Settings(BaseSettings):
     SNS_ALERT_TOPIC_ARN: Optional[str] = None
     
     # GitHub
-    GITHUB_TOKEN: Optional[str] = None
-    GITHUB_REPO: Optional[str] = None
+    GITHUB_TOKEN: str = ""
+    GITHUB_REPO: str = "Rajiv6165/sapflow"
+    GITHUB_WEBHOOK_SECRET: str = "sapflow-webhook-secret-dev"
+    PIPELINE_SYNC_INTERVAL: int = 60  # seconds between GitHub API syncs
     
     # CORS
     CORS_ORIGINS: list[str] = ["http://localhost:3000"]
