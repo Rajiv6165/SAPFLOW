@@ -8,14 +8,33 @@ from backend.routers import pipeline, transport, health, webhooks
 from backend.services.sap_btp import SAPBTPService
 from backend.services.aws_alerts import AWSAlertsService
 from backend.services.github_service import GitHubService
+from fastapi.middleware.trustedhost import TrustedHostMiddleware
 import asyncio
 import logging
+import time
 from datetime import datetime
 
 logging.basicConfig(level=logging.INFO)
 logger = logging.getLogger(__name__)
 
 app = FastAPI(title="SAPFlow API", version="1.0.0")
+
+# Request Logging Middleware
+@app.middleware("http")
+async def log_requests(request, call_next):
+    start_time = time.time()
+    response = await call_next(request)
+    duration = time.time() - start_time
+    logger.info(
+        f"Method: {request.method} Path: {request.url.path} "
+        f"Status: {response.status_code} Duration: {duration:.4f}s"
+    )
+    return response
+
+if settings.is_production:
+    app.add_middleware(
+        TrustedHostMiddleware, allowed_hosts=settings.ALLOWED_HOSTS
+    )
 
 app.add_middleware(
     CORSMiddleware,
@@ -36,15 +55,19 @@ aws_service = AWSAlertsService()
 
 @app.on_event("startup")
 async def startup_event():
-    db_url = settings.DATABASE_URL
-    if db_url.startswith("postgresql://"):
-        db_url = db_url.replace("postgresql://", "postgresql+asyncpg://", 1)
-        
-    engine = create_async_engine(db_url, echo=False)
-    async with engine.begin() as conn:
-        await conn.run_sync(Base.metadata.create_all)
-    logger.info("Database tables created successfully")
-    await engine.dispose()
+    if settings.is_production and settings.SAP_MOCK_MODE:
+        logger.warning("⚠️ SAP MOCK MODE is ENABLED in production environment!")
+
+    if not settings.is_production:
+        db_url = settings.DATABASE_URL
+        if db_url.startswith("postgresql://"):
+            db_url = db_url.replace("postgresql://", "postgresql+asyncpg://", 1)
+            
+        engine = create_async_engine(db_url, echo=False)
+        async with engine.begin() as conn:
+            await conn.run_sync(Base.metadata.create_all)
+        logger.info("Database tables created successfully")
+        await engine.dispose()
     
     app.state.github = GitHubService()
     

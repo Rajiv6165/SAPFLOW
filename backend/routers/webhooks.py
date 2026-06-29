@@ -14,8 +14,11 @@ from backend.core.config import settings
 from backend.core.websocket_manager import manager
 from backend.models.database import PipelineRun
 from backend.routers.pipeline import get_db
+from backend.services.aws_alerts import AWSAlertsService
 
 logger = logging.getLogger(__name__)
+
+aws_alerts = AWSAlertsService()
 
 router = APIRouter(tags=["webhooks"])
 
@@ -133,6 +136,16 @@ async def github_webhook(
                     run.duration_seconds = int((datetime.utcnow() - run.triggered_at).total_seconds())
             
             await db.commit()
+
+            # Record custom metrics to CloudWatch
+            try:
+                await aws_alerts.record_pipeline_result(
+                    status=mapped_status,
+                    branch=branch,
+                    duration=duration or 0
+                )
+            except Exception as e:
+                logger.error(f"Error publishing CloudWatch pipeline run metric: {e}")
             
             # Record WS event and broadcast
             event_type = "PIPELINE_PASSED" if mapped_status == "success" else "PIPELINE_FAILED"

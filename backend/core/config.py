@@ -40,6 +40,20 @@ class Settings(BaseSettings):
     # CORS
     CORS_ORIGINS: list[str] = ["http://localhost:3000"]
     
+    # Production
+    ENVIRONMENT: str = "development"  # development / production
+    LOG_LEVEL: str = "INFO"
+    ALLOWED_HOSTS: list[str] = ["*"]
+
+    @property
+    def is_production(self) -> bool:
+        return self.ENVIRONMENT == "production"
+
+    @property
+    def database_url_sync(self) -> str:
+        # Return sync version of DATABASE_URL for Alembic
+        return self.DATABASE_URL.replace("postgresql+asyncpg", "postgresql")
+
     class Config:
         env_file = ".env"
         case_sensitive = True

@@ -1,280 +1,149 @@
-<<<<<<< HEAD
-# SAPFlow - SAP Transport Management CI/CD Pipeline
+# SAPFlow — SAP Transport Management CI/CD DevOps Pipeline
 
-A production-grade automated CI/CD DevOps pipeline for SAP S/4HANA transport management, deployed on AWS with real-time monitoring dashboard.
+A production-grade automated CI/CD DevOps pipeline for SAP S/4HANA transport management, deployed on AWS with a real-time monitoring dashboard.
 
-## Features
+## 🚀 Live Demo
 
-- **Automated Transport Promotion**: Promote SAP transports between DEV, QA, and PROD systems
-- **ABAP Code Inspection**: Validate ABAP code quality before transport promotion
-- **Real-time Monitoring**: WebSocket-based dashboard for pipeline status, system health, and alerts
-- **AWS Integration**: CloudWatch metrics, SNS alerts, and ECS deployment
-- **GitHub Actions**: CI/CD workflows for automated testing and deployment
-- **SAP BTP Integration**: OAuth2 authentication with SAP Business Technology Platform
-- **Mock Mode**: Offline development mode without SAP system connectivity
+| Service | URL |
+|---------|-----|
+| Dashboard | http://${ALB_DNS_NAME} *(Replaced with ALB DNS once provisioned)* |
+| API Docs | http://${ALB_DNS_NAME}/docs |
+| GitHub Actions | https://github.com/Rajiv6165/sapflow/actions |
+
+---
 
 ## Architecture
 
 ```
-┌─────────────────┐     ┌──────────────┐     ┌─────────────┐
-│   Frontend      │────▶│   Backend    │────▶│   SAP BTP   │
-│  (Next.js)      │     │  (FastAPI)   │     │   System    │
-└─────────────────┘     └──────────────┘     └─────────────┘
-                              │
-                              ▼
-                        ┌──────────────┐
-                        │  PostgreSQL  │
-                        └──────────────┘
-                              │
-                              ▼
-                        ┌──────────────┐
-                        │    Redis     │
-                        └──────────────┘
+                       Internet
+                          │
+                          ▼
+             Application Load Balancer (ALB)
+             ├── /api/*  ──▶ ECS Fargate (sapflow-backend, port 8000)
+             ├── /ws     ──▶ ECS Fargate (sapflow-backend, port 8000)
+             └── /*      ──▶ ECS Fargate (sapflow-frontend, port 3000)
+             
+ECS Fargate Services (Private Subnets):
+  ├── sapflow-backend   (FastAPI + uvicorn, port 8000)
+  └── sapflow-frontend  (Next.js, port 3000)
+
+Supporting Services:
+  ├── RDS PostgreSQL    (db.t3.micro, sapflow database)
+  ├── ElastiCache Redis (cache.t3.micro, Redis 7.0 cache)
+  ├── ECR               (Docker image registry)
+  ├── CloudWatch        (logs + metric alarms)
+  ├── SNS               (email alerts)
+  └── Secrets Manager   (secure env var injection)
 ```
 
-## Technology Stack
+---
 
-- **Backend**: Python 3.11, FastAPI, SQLAlchemy, AsyncPG, Redis
-- **Frontend**: Next.js 14, React 18, TypeScript, Tailwind CSS, Recharts
-- **Database**: PostgreSQL 15
-- **Cache**: Redis 7
-- **Container**: Docker, Docker Compose
-- **AWS**: ECS, CloudWatch, SNS, ECR
-- **CI/CD**: GitHub Actions
-- **SAP Integration**: SAP BTP OAuth2
+## Tech Stack
+
+| Layer | Technology |
+|-------|-----------|
+| **Frontend** | Next.js 14, React 18, TypeScript, Tailwind CSS, Recharts |
+| **Backend** | Python 3.11, FastAPI, SQLAlchemy, AsyncPG, Redis |
+| **Database** | PostgreSQL 15 (AWS RDS) |
+| **Cache** | Redis 7 (AWS ElastiCache) |
+| **Container** | Docker, AWS ECS Fargate |
+| **Registry** | AWS ECR |
+| **CI/CD** | GitHub Actions |
+| **Monitoring** | AWS CloudWatch, SNS |
+| **SAP Integration** | SAP BTP APIs, ABAP Code Inspector |
+| **Infrastructure** | Terraform |
+
+---
+
+## Features
+
+- **Automated Transport Promotion**: Promote SAP transports between DEV, QA, and PROD systems.
+- **ABAP Code Inspection**: Validate ABAP code quality before transport promotion (using mock mode or BTP connections).
+- **Real-time Monitoring**: WebSocket-based dashboard for pipeline status, system health snapshots, and live alerts.
+- **AWS Production Infrastructure**: Provisions secure VPC, RDS, Redis, Application Load Balancers, task execution IAM roles, and secret injection.
+- **Robust Database Migrations**: Schema updates are managed via Alembic migrations instead of standard SQL executions.
+
+---
 
 ## Prerequisites
 
 - Docker and Docker Compose
+- Terraform >= 1.0
 - Python 3.11+
 - Node.js 18+
-- AWS Account (for production deployment)
-- SAP BTP credentials (for production)
+- AWS CLI configured with admin permissions
 
-## Quick Start
+---
 
-### 1. Clone and Setup
+## Development Setup
 
+### 1. Clone and Setup Environment
 ```bash
-git clone <repository-url>
-cd SAPFLOW
+git clone https://github.com/Rajiv6165/sapflow.git
+cd sapflow
 cp .env.example .env
 ```
 
-### 2. Configure Environment Variables
-
-Edit `.env` with your configuration:
-
-```env
-# SAP BTP Configuration
-SAP_BTP_HOST=https://your-sap-btp-host.com
-SAP_CLIENT_ID=your_client_id
-SAP_CLIENT_SECRET=your_client_secret
-SAP_TOKEN_URL=https://your-sap-btp-host.com/oauth/token
-SAP_MOCK_MODE=true
-
-# AWS Configuration
-AWS_ACCESS_KEY_ID=your_access_key
-AWS_SECRET_ACCESS_KEY=your_secret_key
-AWS_REGION=ap-south-1
-AWS_ECR_REGISTRY=your_account_id.dkr.ecr.ap-south-1.amazonaws.com
-SNS_ALERT_TOPIC_arn=arn:aws:sns:...
-
-# GitHub Configuration
-GITHUB_TOKEN=your_github_token
-GITHUB_REPO=owner/repo
-
-# Database
-DATABASE_URL=postgresql+asyncpg://postgres:postgres@postgres:5432/sapflow
-REDIS_URL=redis://redis:6379/0
-
-# Frontend
-NEXT_PUBLIC_API_URL=http://localhost:8000
-NEXT_PUBLIC_WS_URL=ws://localhost:8000/ws/pipeline
-```
-
-### 3. Start Services
-
+### 2. Run Local Containers (FastAPI + Next.js + Postgres + Redis)
 ```bash
-docker-compose up -d
+docker-compose up --build -d
 ```
+Access the local dashboard at http://localhost:3000 and the API documentation at http://localhost:8000/docs.
 
-This starts:
-- PostgreSQL on port 5432
-- Redis on port 6379
-- Backend API on port 8000
-- Frontend dashboard on port 3000
-- Transport runner service
-
-### 4. Access the Dashboard
-
-Open http://localhost:3000 in your browser.
-
-## Development
-
-### Backend Development
-
+### 3. Run Database Migrations Locally
 ```bash
 cd backend
-pip install -r requirements.txt
-uvicorn main:app --reload --host 0.0.0.0 --port 8000
+alembic upgrade head
 ```
 
-### Frontend Development
+---
 
+## Production Deployment to AWS
+
+### 1. Initialize AWS Infrastructure
+Navigate to the Terraform folder, configure S3 backend manually, and run:
 ```bash
-cd frontend
-npm install
-npm run dev
+cd infra/terraform
+terraform init
+terraform plan -var="db_password=YourSecurePass123" \
+               -var="alert_email=rajivthakkar6165@gmail.com" \
+               -var="github_token=ghp_xxx" \
+               -var="github_webhook_secret=sapflow-secret" \
+               -var="backend_image=placeholder" \
+               -var="frontend_image=placeholder"
 ```
-
-### Transport Runner
-
+Apply the configuration:
 ```bash
-cd transport-runner
-pip install -r requirements.txt
-python test_runner.py --transport-id DEVK900001 --source-system DEV --mock
+terraform apply -var="db_password=YourSecurePass123" \
+                -var="alert_email=rajivthakkar6165@gmail.com" \
+                -var="github_token=ghp_xxx" \
+                -var="github_webhook_secret=sapflow-secret" \
+                -var="backend_image=$(terraform output -raw ecr_backend_url):latest" \
+                -var="frontend_image=$(terraform output -raw ecr_frontend_url):latest"
 ```
 
-## Production Deployment
-
-### 1. Build and Push Docker Images
-
+### 2. Build & Deploy Containers
+Set ECR credentials and invoke the deploy script:
 ```bash
-# Build backend
-docker build -t sapflow-backend ./backend
-docker tag sapflow-backend:latest <ECR_REGISTRY>/sapflow-backend:latest
-docker push <ECR_REGISTRY>/sapflow-backend:latest
+export AWS_ACCOUNT_ID=$(aws sts get-caller-identity --query Account --output text)
+export AWS_REGION=ap-south-1
+export ECR_BACKEND=$(cd infra/terraform && terraform output -raw ecr_backend_url)
+export ECR_FRONTEND=$(cd infra/terraform && terraform output -raw ecr_frontend_url)
 
-# Build frontend
-docker build -t sapflow-frontend ./frontend
-docker tag sapflow-frontend:latest <ECR_REGISTRY>/sapflow-frontend:latest
-docker push <ECR_REGISTRY>/sapflow-frontend:latest
-
-# Build transport-runner
-docker build -t sapflow-transport-runner ./transport-runner
-docker tag sapflow-transport-runner:latest <ECR_REGISTRY>/sapflow-transport-runner:latest
-docker push <ECR_REGISTRY>/sapflow-transport-runner:latest
+chmod +x scripts/deploy.sh
+./scripts/deploy.sh
 ```
 
-### 2. Deploy to ECS
-
-```bash
-aws ecs register-task-definition --cli-input-json file://infra/ecs-task-definition.json
-aws ecs update-service --cluster sapflow --service sapflow-backend --task-definition sapflow-backend
-```
-
-### 3. Setup CloudWatch Alarms
-
-```bash
-aws cloudwatch put-metric-alarm --cli-input-json file://infra/cloudwatch-alarms.json
-```
-
-### 4. Setup SNS Topic
-
-```bash
-python infra/sns-setup.py
-```
-
-### 5. Start Production Services
-
-```bash
-docker-compose -f docker-compose.prod.yml up -d
-```
-
-## API Endpoints
-
-### Pipeline
-- `GET /pipeline/status` - Get current pipeline status
-- `GET /pipeline/runs/{run_id}` - Get specific run details
-- `POST /pipeline/trigger?branch={branch}` - Trigger pipeline
-- `GET /pipeline/metrics` - Get pipeline metrics
-
-### Transport
-- `GET /transport/active` - Get active transports
-- `GET /transport/history` - Get transport history
-- `POST /transport/promote` - Promote transport
-- `GET /transport/{transport_id}` - Get transport details
-- `POST /transport/validate?transport_id={id}` - Validate transport
-
-### Health
-- `GET /health/system` - Get SAP system health
-- `GET /health/history?limit={n}` - Get health history
-
-### WebSocket
-- `WS /ws/pipeline` - Real-time pipeline status updates
-
-## GitHub Actions Workflows
-
-### CI Pipeline (`.github/workflows/ci.yml`)
-
-Triggers on push to main/develop:
-1. Code quality checks (flake8, black)
-2. Unit tests with coverage
-3. ABAP validation (mock mode)
-4. Docker build and push to ECR
-5. Slack notification
-
-### Transport Promotion (`.github/workflows/transport-promote.yml`)
-
-Manual workflow to promote transports:
-1. Select source system (DEV/QA)
-2. Enter transport ID
-3. Select target system (QA/PROD)
-4. Call FastAPI promote endpoint
-
-## Monitoring
-
-### CloudWatch Metrics
-
-- CPU Utilization (ECS)
-- Memory Utilization (ECS)
-- Pipeline Success Rate (Custom)
-- Transport Validation Failures (Custom)
-
-### SNS Alerts
-
-- Pipeline failures
-- High CPU/memory usage
-- Transport validation failures
-- System health degradation
+---
 
 ## Troubleshooting
 
-### Backend won't start
-
-Check database connection:
-```bash
-docker-compose logs postgres
-docker-compose logs backend
-```
-
-### Frontend can't connect to backend
-
-Verify CORS settings in `backend/core/config.py` and environment variables.
-
-### SAP BTP connection fails
-
-Enable mock mode in `.env`:
-```env
-SAP_MOCK_MODE=true
-```
-
-### Transport validation fails
-
-Check transport-runner logs:
-```bash
-docker-compose logs transport-runner
-```
+- **Check ECS Container Logs**: Logs are piped directly to CloudWatch under `/sapflow/backend` and `/sapflow/frontend` groups.
+- **Teardown**: To destroy all AWS resources and avoid recurring costs, run:
+  ```bash
+  chmod +x scripts/destroy.sh
+  ./scripts/destroy.sh
+  ```
 
 ## License
-
 MIT
-
-## Support
-
-For issues and questions, please open an issue on GitHub.
-=======
-# SAPFLOW
-Enterprise-grade SAP DevOps automation pipeline — CI/CD for SAP S/4HANA transport management with real-time monitoring dashboard, built on FastAPI · React · Docker · AWS · SAP BTP
->>>>>>> 5e1a51ffb743a9739f7fce1010120d5108924ccd

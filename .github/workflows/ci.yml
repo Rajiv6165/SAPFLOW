@@ -11,12 +11,11 @@ name: SAPFlow CI Pipeline
 on:
   push:
     branches:
-      - main
-      - develop
+      - '**'
+      - '!main'
   pull_request:
     branches:
-      - main
-      - develop
+      - '**'
 
 jobs:
   code-quality:
@@ -99,36 +98,9 @@ jobs:
               description: 'ABAP code inspection completed'
             })
 
-  docker-build:
-    runs-on: ubuntu-latest
-    needs: abap-validation
-    steps:
-      - name: Checkout code
-        uses: actions/checkout@v4
-      
-      - name: Configure AWS credentials
-        uses: aws-actions/configure-aws-credentials@v4
-        with:
-          aws-access-key-id: ${{ secrets.AWS_ACCESS_KEY_ID }}
-          aws-secret-access-key: ${{ secrets.AWS_SECRET_ACCESS_KEY }}
-          aws-region: ap-south-1
-      
-      - name: Login to Amazon ECR
-        id: login-ecr
-        uses: aws-actions/amazon-ecr-login@v2
-      
-      - name: Build and push Docker image
-        env:
-          ECR_REGISTRY: ${{ steps.login-ecr.outputs.registry }}
-          ECR_REPOSITORY: sapflow-transport-runner
-          IMAGE_TAG: ${{ github.sha }}
-        run: |
-          docker build -t $ECR_REGISTRY/$ECR_REPOSITORY:$IMAGE_TAG transport-runner/
-          docker push $ECR_REGISTRY/$ECR_REPOSITORY:$IMAGE_TAG
-
   notify:
     runs-on: ubuntu-latest
-    needs: [code-quality, abap-validation, docker-build]
+    needs: [code-quality, abap-validation]
     if: always()
     steps:
       - name: Send Slack notification
@@ -146,7 +118,7 @@ jobs:
           SLACK_WEBHOOK_URL: ${{ secrets.SLACK_WEBHOOK_URL }}
 
   report-to-sapflow:
-    needs: [code-quality, abap-validation, docker-build]
+    needs: [code-quality, abap-validation]
     runs-on: ubuntu-latest
     if: always()
     steps:
@@ -159,16 +131,13 @@ jobs:
           # Determine the overall pipeline conclusion
           CONCLUSION="success"
           if [ "${{ needs.code-quality.result }}" = "failure" ] || \
-             [ "${{ needs.abap-validation.result }}" = "failure" ] || \
-             [ "${{ needs.docker-build.result }}" = "failure" ]; then
+             [ "${{ needs.abap-validation.result }}" = "failure" ]; then
             CONCLUSION="failure"
           elif [ "${{ needs.code-quality.result }}" = "cancelled" ] || \
-               [ "${{ needs.abap-validation.result }}" = "cancelled" ] || \
-               [ "${{ needs.docker-build.result }}" = "cancelled" ]; then
+               [ "${{ needs.abap-validation.result }}" = "cancelled" ]; then
             CONCLUSION="cancelled"
           elif [ "${{ needs.code-quality.result }}" = "skipped" ] && \
-               [ "${{ needs.abap-validation.result }}" = "skipped" ] && \
-               [ "${{ needs.docker-build.result }}" = "skipped" ]; then
+               [ "${{ needs.abap-validation.result }}" = "skipped" ]; then
             CONCLUSION="skipped"
           fi
           

@@ -9,6 +9,7 @@ logger = logging.getLogger(__name__)
 
 class AWSAlertsService:
     def __init__(self):
+        self.settings = settings
         if settings.AWS_ACCESS_KEY_ID and settings.AWS_SECRET_ACCESS_KEY:
             self.cloudwatch = boto3.client(
                 'cloudwatch',
@@ -21,6 +22,16 @@ class AWSAlertsService:
                 region_name=settings.AWS_REGION,
                 aws_access_key_id=settings.AWS_ACCESS_KEY_ID,
                 aws_secret_access_key=settings.AWS_SECRET_ACCESS_KEY
+            )
+        elif settings.is_production:
+            # In production, boto3 will automatically use ECS Task IAM Role
+            self.cloudwatch = boto3.client(
+                'cloudwatch',
+                region_name=settings.AWS_REGION
+            )
+            self.sns = boto3.client(
+                'sns',
+                region_name=settings.AWS_REGION
             )
         else:
             self.cloudwatch = None
@@ -73,6 +84,34 @@ Timestamp: {self._get_timestamp()}
         except ClientError as e:
             logger.error(f"Failed to put CloudWatch metric: {e}")
             return False
+            
+    async def record_pipeline_result(self, status: str, branch: str, duration: int):
+        """
+        Publishes a custom CloudWatch metric for pipeline results.
+        Called after every pipeline run completes.
+        """
+        if not self.settings.is_production:
+            logger.info(f"[MOCK] CloudWatch metric: PipelineResult={status}")
+            return
+        
+        try:
+            self.cloudwatch.put_metric_data(
+                Namespace='SAPFlow',
+                MetricData=[
+                    {
+                        'MetricName': 'PipelineFailures' if status == 'failed' else 'PipelineSuccesses',
+                        'Value': 1,
+                        'Unit': 'Count',
+                        'Dimensions': [
+                            {'Name': 'Branch', 'Value': branch},
+                            {'Name': 'Environment', 'Value': 'production'}
+                        ]
+                    }
+                ]
+            )
+            logger.info(f"Custom CloudWatch metric recorded for pipeline run completion: status={status}")
+        except Exception as e:
+            logger.error(f"Failed to publish custom pipeline result metric: {e}")
     
     def check_alarm_states(self) -> List[Dict]:
         if not self.cloudwatch:
