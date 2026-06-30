@@ -4,6 +4,7 @@ from backend.models.database import SystemHealthSnapshot
 from sqlalchemy.ext.asyncio import AsyncSession
 from backend.core.config import settings
 import logging
+from datetime import datetime
 
 logger = logging.getLogger(__name__)
 
@@ -15,6 +16,17 @@ sap_service = SAPBTPService()
 @router.get("/")
 async def root_health():
     return {"status": "ok", "service": "sapflow-backend"}
+
+
+@router.get("/sap-connection")
+async def get_sap_connection():
+    try:
+        status = sap_service.get_connection_status()
+        status["last_checked"] = datetime.utcnow().isoformat()
+        return status
+    except Exception as e:
+        logger.error(f"Error fetching SAP connection status: {e}")
+        raise HTTPException(status_code=500, detail=str(e))
 
 
 @router.get("/system")

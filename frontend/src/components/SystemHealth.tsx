@@ -19,6 +19,13 @@ interface HealthHistoryItem {
   avg_response_ms: number;
 }
 
+interface ConnectionStatus {
+  mode: 'live' | 'mock';
+  has_credentials: boolean;
+  api_base_url: string | null;
+  last_checked: string;
+}
+
 interface MetricCardProps {
   label: string;
   value: string;
@@ -83,13 +90,15 @@ function MetricCard({ label, value, unit, color, bg, border, icon, sparkData, li
 export default function SystemHealth() {
   const [health, setHealth] = useState<SystemHealthType | null>(null);
   const [history, setHistory] = useState<HealthHistoryItem[]>([]);
+  const [connectionStatus, setConnectionStatus] = useState<ConnectionStatus | null>(null);
   const [loading, setLoading] = useState(true);
 
   const fetchData = async () => {
     try {
-      const [currentHealth, healthHistory] = await Promise.all([
+      const [currentHealth, healthHistory, connStatus] = await Promise.all([
         api.getSystemHealth(),
         api.getHealthHistory(10),
+        api.getSapConnectionStatus(),
       ]);
       if (currentHealth && healthHistory) {
         setHealth(currentHealth);
@@ -98,9 +107,15 @@ export default function SystemHealth() {
         setHealth(null);
         setHistory([]);
       }
+      if (connStatus) {
+        setConnectionStatus(connStatus);
+      } else {
+        setConnectionStatus(null);
+      }
     } catch {
       setHealth(null);
       setHistory([]);
+      setConnectionStatus(null);
     } finally {
       setLoading(false);
     }
@@ -230,6 +245,25 @@ export default function SystemHealth() {
           </div>
         )}
       </div>
+
+      {/* SAP BTP Connection Status Badge */}
+      {connectionStatus && (
+        <div className="mb-4">
+          {connectionStatus.mode === 'live' ? (
+            <span className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-full text-xs font-semibold" style={{ background: 'rgba(16,185,129,0.08)', border: '1px solid rgba(16,185,129,0.15)', color: '#10b981' }}>
+              <span>🟢</span> SAP BTP — Live Connection
+            </span>
+          ) : connectionStatus.has_credentials ? (
+            <span className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-full text-xs font-semibold" style={{ background: 'rgba(245,158,11,0.08)', border: '1px solid rgba(245,158,11,0.15)', color: '#f59e0b' }}>
+              <span>🟡</span> SAP BTP — Credentials present, connection failed (using mock data)
+            </span>
+          ) : (
+            <span className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-full text-xs font-semibold" style={{ background: 'rgba(148,163,184,0.08)', border: '1px solid rgba(148,163,184,0.15)', color: '#94a3b8' }}>
+              <span>⚪</span> SAP BTP — Mock Mode (no credentials configured)
+            </span>
+          )}
+        </div>
+      )}
 
       {/* Metric Grid */}
       <div className="grid grid-cols-2 gap-3">

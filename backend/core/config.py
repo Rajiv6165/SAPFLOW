@@ -24,6 +24,23 @@ class Settings(BaseSettings):
     SAP_TOKEN_URL: Optional[str] = None
     SAP_MOCK_MODE: bool = True
     
+    # SAP BTP Real Credentials (leave blank to use mock mode)
+    SAP_BTP_CLIENT_ID: str = ""
+    SAP_BTP_CLIENT_SECRET: str = ""
+    SAP_BTP_TOKEN_URL: str = ""
+    SAP_BTP_API_BASE_URL: str = ""
+
+    @property
+    def has_valid_sap_credentials(self) -> bool:
+        """True only if all 4 SAP BTP credentials are present and don't look like placeholders."""
+        creds = [self.SAP_BTP_CLIENT_ID, self.SAP_BTP_CLIENT_SECRET, 
+                 self.SAP_BTP_TOKEN_URL, self.SAP_BTP_API_BASE_URL]
+        if any(not c for c in creds):
+            return False
+        if any("placeholder" in c.lower() or "your_" in c.lower() for c in creds):
+            return False
+        return True
+    
     # AWS Configuration
     AWS_ACCESS_KEY_ID: Optional[str] = None
     AWS_SECRET_ACCESS_KEY: Optional[str] = None

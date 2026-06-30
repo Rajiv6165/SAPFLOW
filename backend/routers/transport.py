@@ -185,8 +185,8 @@ async def validate_transport(transport_id: str):
             client_secret=settings.SAP_CLIENT_SECRET
         )
         
-        inspection_result = inspector.run_code_inspection(transport_id)
-        objects = inspector.validate_transport_objects(transport_id)
+        inspection_result = await inspector.run_code_inspection(transport_id)
+        objects = await inspector.validate_transport_objects(transport_id)
         
         validator = TransportValidator(objects)
         validation_result = validator.generate_report()

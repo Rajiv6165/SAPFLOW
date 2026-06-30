@@ -4,6 +4,7 @@ import json
 import logging
 import os
 import sys
+import asyncio
 from abap_inspector import ABAPInspector
 from transport_validator import TransportValidator
 
@@ -38,10 +39,10 @@ def main():
         )
         
         logger.info("Running ABAP code inspection...")
-        inspection_result = inspector.run_code_inspection(args.transport_id)
+        inspection_result = asyncio.run(inspector.run_code_inspection(args.transport_id))
         
         logger.info("Validating transport objects...")
-        objects = inspector.validate_transport_objects(args.transport_id)
+        objects = asyncio.run(inspector.validate_transport_objects(args.transport_id))
         
         logger.info("Running transport validator...")
         validator = TransportValidator(objects)

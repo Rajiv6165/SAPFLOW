@@ -84,6 +84,7 @@ export const api = {
     });
   },
   getSystemHealth: () => safeFetch<SystemHealth>(`${BASE_URL}/health/system`),
+  getSapConnectionStatus: () => fetch(`${BASE_URL}/health/sap-connection`).then(r => r.json()),
   getHealthHistory: (limit?: number) => {
     const url = limit ? `${BASE_URL}/health/history?limit=${limit}` : `${BASE_URL}/health/history`;
     return safeFetch<any[]>(url);
