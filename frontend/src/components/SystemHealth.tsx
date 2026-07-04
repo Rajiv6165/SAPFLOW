@@ -92,6 +92,9 @@ export default function SystemHealth() {
   const [history, setHistory] = useState<HealthHistoryItem[]>([]);
   const [connectionStatus, setConnectionStatus] = useState<ConnectionStatus | null>(null);
   const [loading, setLoading] = useState(true);
+  const [isTesting, setIsTesting] = useState(false);
+  const [testResult, setTestResult] = useState<any>(null);
+  const [showTestResult, setShowTestResult] = useState(false);
 
   const fetchData = async () => {
     try {
@@ -126,6 +129,26 @@ export default function SystemHealth() {
     const interval = setInterval(fetchData, 30000);
     return () => clearInterval(interval);
   }, []);
+
+  const handleTestConnection = async () => {
+    setIsTesting(true);
+    setTestResult(null);
+    setShowTestResult(true);
+    try {
+      const res = await api.testSapConnection();
+      setTestResult(res);
+    } catch {
+      setTestResult({
+        token_obtained: false,
+        api_reachable: false,
+        error: 'Network error or backend unreachable',
+        suggestions: ['Make sure the FastAPI server is running and accessible'],
+        tested_at: new Date().toISOString()
+      });
+    } finally {
+      setIsTesting(false);
+    }
+  };
 
   const getMetricThreshold = (value: number, type: 'cpu' | 'memory' | 'response') => {
     if (type === 'response') {
@@ -190,7 +213,6 @@ export default function SystemHealth() {
     );
   }
 
-
   const cpuT  = getMetricThreshold(health.cpu_percent, 'cpu');
   const memT  = getMetricThreshold(health.memory_percent, 'memory');
   const respT = getMetricThreshold(health.avg_response_ms, 'response');
@@ -248,19 +270,105 @@ export default function SystemHealth() {
 
       {/* SAP BTP Connection Status Badge */}
       {connectionStatus && (
-        <div className="mb-4">
-          {connectionStatus.mode === 'live' ? (
-            <span className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-full text-xs font-semibold" style={{ background: 'rgba(16,185,129,0.08)', border: '1px solid rgba(16,185,129,0.15)', color: '#10b981' }}>
-              <span>🟢</span> SAP BTP — Live Connection
-            </span>
-          ) : connectionStatus.has_credentials ? (
-            <span className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-full text-xs font-semibold" style={{ background: 'rgba(245,158,11,0.08)', border: '1px solid rgba(245,158,11,0.15)', color: '#f59e0b' }}>
-              <span>🟡</span> SAP BTP — Credentials present, connection failed (using mock data)
-            </span>
-          ) : (
-            <span className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-full text-xs font-semibold" style={{ background: 'rgba(148,163,184,0.08)', border: '1px solid rgba(148,163,184,0.15)', color: '#94a3b8' }}>
-              <span>⚪</span> SAP BTP — Mock Mode (no credentials configured)
-            </span>
+        <div className="mb-4 flex flex-col gap-3">
+          <div className="flex items-center justify-between flex-wrap gap-2">
+            {connectionStatus.mode === 'live' ? (
+              <span className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-full text-xs font-semibold" style={{ background: 'rgba(16,185,129,0.08)', border: '1px solid rgba(16,185,129,0.15)', color: '#10b981' }}>
+                <span>🟢</span> SAP BTP — Live Connection
+              </span>
+            ) : connectionStatus.has_credentials ? (
+              <span className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-full text-xs font-semibold" style={{ background: 'rgba(245,158,11,0.08)', border: '1px solid rgba(245,158,11,0.15)', color: '#f59e0b' }}>
+                <span>🟡</span> SAP BTP — Credentials present (mock fallback)
+              </span>
+            ) : (
+              <span className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-full text-xs font-semibold" style={{ background: 'rgba(148,163,184,0.08)', border: '1px solid rgba(148,163,184,0.15)', color: '#94a3b8' }}>
+                <span>⚪</span> SAP BTP — Mock Mode (no credentials)
+              </span>
+            )}
+
+            {connectionStatus.has_credentials && (
+              <button
+                onClick={handleTestConnection}
+                disabled={isTesting}
+                className="px-2.5 py-1 rounded-lg text-xs font-semibold transition-all border border-indigo-500/30 text-indigo-400 bg-indigo-500/5 hover:bg-indigo-500/10 cursor-pointer disabled:opacity-50"
+              >
+                {isTesting ? (
+                  <span className="flex items-center gap-1">
+                    <svg className="w-3 h-3 animate-spin" fill="none" viewBox="0 0 24 24">
+                      <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4" />
+                      <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4z" />
+                    </svg>
+                    Testing...
+                  </span>
+                ) : (
+                  'Test Connection'
+                )}
+              </button>
+            )}
+          </div>
+
+          {/* Diagnostics Panel */}
+          {showTestResult && (
+            <div className="rounded-xl p-3 text-xs" style={{ background: 'rgba(15,23,42,0.6)', border: '1px solid rgba(99,102,241,0.15)' }}>
+              <div className="flex items-center justify-between mb-2 pb-1.5" style={{ borderBottom: '1px solid rgba(99,102,241,0.1)' }}>
+                <span className="font-semibold text-slate-300">Connection Diagnostics</span>
+                <button onClick={() => setShowTestResult(false)} className="text-slate-500 hover:text-slate-300">✕</button>
+              </div>
+
+              {isTesting ? (
+                <div className="py-2 text-slate-400 animate-pulse">Running diagnostics suite... (can take 3-5 seconds)</div>
+              ) : testResult ? (
+                <div className="space-y-2">
+                  {testResult.token_obtained && testResult.api_reachable ? (
+                    <div className="text-emerald-400 font-medium">✅ Live connection confirmed!</div>
+                  ) : testResult.token_obtained ? (
+                    <div className="space-y-2">
+                      <div className="text-amber-500 font-medium">
+                        ✅ Token obtained, ❌ API not reachable
+                      </div>
+                      {testResult.error && (
+                        <div className="text-rose-400 font-mono text-[10px] bg-rose-950/40 p-2 rounded-lg border border-rose-900/30">
+                          {testResult.error}
+                        </div>
+                      )}
+                      {testResult.suggestions && testResult.suggestions.length > 0 && (
+                        <div className="space-y-1 mt-1.5">
+                          <span className="text-slate-400 font-semibold block">Suggestions:</span>
+                          <ul className="list-disc list-inside text-[11px] text-slate-300 space-y-1">
+                            {testResult.suggestions.map((s: string, idx: number) => (
+                              <li key={idx}>{s}</li>
+                            ))}
+                          </ul>
+                        </div>
+                      )}
+                    </div>
+                  ) : (
+                    <div className="space-y-2">
+                      <div className="text-rose-400 font-medium">❌ Token failed</div>
+                      <div className="text-rose-300 font-medium text-[11px]">Check your CLIENT_ID and CLIENT_SECRET</div>
+                      {testResult.error && (
+                        <div className="text-rose-400 font-mono text-[10px] bg-rose-950/40 p-2 rounded-lg border border-rose-900/30">
+                          {testResult.error}
+                        </div>
+                      )}
+                      {testResult.suggestions && testResult.suggestions.length > 0 && (
+                        <div className="space-y-1 mt-1.5">
+                          <span className="text-slate-400 font-semibold block">Suggestions:</span>
+                          <ul className="list-disc list-inside text-[11px] text-slate-300 space-y-1">
+                            {testResult.suggestions.map((s: string, idx: number) => (
+                              <li key={idx}>{s}</li>
+                            ))}
+                          </ul>
+                        </div>
+                      )}
+                    </div>
+                  )}
+                  <span className="text-[10px] text-slate-500 block pt-1 border-t border-slate-800 mt-2">
+                    Tested at: {new Date(testResult.tested_at).toLocaleString()}
+                  </span>
+                </div>
+              ) : null}
+            </div>
           )}
         </div>
       )}

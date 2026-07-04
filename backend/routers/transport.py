@@ -1,23 +1,21 @@
-from fastapi import APIRouter, HTTPException, Depends
+from fastapi import APIRouter, HTTPException, Depends, Request
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy import select
-from backend.models.database import TransportRecord
+from backend.models.database import TransportRecord, engine
 from backend.services.sap_btp import SAPBTPService
 from backend.core.config import settings
-from sqlalchemy.ext.asyncio import create_async_engine
+from backend.models.schemas import TransportPromoteRequest
 from datetime import datetime
 import logging
+from typing import Optional
 
 logger = logging.getLogger(__name__)
-
-from backend.models.schemas import TransportPromoteRequest
 
 router = APIRouter(prefix="/transport", tags=["transport"])
 sap_service = SAPBTPService()
 
 
 async def get_db():
-    engine = create_async_engine(settings.DATABASE_URL, echo=False)
     async with AsyncSession(engine) as session:
         yield session
 
@@ -32,13 +30,32 @@ async def get_active_transports():
         raise HTTPException(status_code=500, detail=str(e))
 
 
-@router.get("/history")
-async def get_transport_history(db: AsyncSession = Depends(get_db)):
+@router.get("/landscapes")
+async def get_landscapes(db: AsyncSession = Depends(get_db)):
     try:
+        result = await db.execute(select(TransportRecord.landscape).distinct())
+        landscapes = result.scalars().all()
+        landscapes_list = [l for l in landscapes if l]
+        if "DEFAULT" not in landscapes_list:
+            landscapes_list.insert(0, "DEFAULT")
+        return sorted(list(set(landscapes_list)))
+    except Exception as e:
+        logger.error(f"Error fetching landscapes: {e}")
+        raise HTTPException(status_code=500, detail=str(e))
+
+
+@router.get("/history")
+async def get_transport_history(
+    landscape: Optional[str] = None,
+    db: AsyncSession = Depends(get_db)
+):
+    try:
+        query = select(TransportRecord)
+        if landscape and landscape != "all" and landscape.strip() != "":
+            query = query.where(TransportRecord.landscape == landscape)
+            
         result = await db.execute(
-            select(TransportRecord)
-            .order_by(TransportRecord.promoted_at.desc())
-            .limit(50)
+            query.order_by(TransportRecord.promoted_at.desc()).limit(50)
         )
         records = result.scalars().all()
         
@@ -54,7 +71,8 @@ async def get_transport_history(db: AsyncSession = Depends(get_db)):
                     "promoted_by": record.promoted_by,
                     "promoted_at": record.promoted_at.isoformat(),
                     "completed_at": record.completed_at.isoformat() if record.completed_at else None,
-                    "validation_report": record.validation_report
+                    "validation_report": record.validation_report,
+                    "landscape": record.landscape
                 }
                 for record in records
             ]
@@ -66,14 +84,16 @@ async def get_transport_history(db: AsyncSession = Depends(get_db)):
 
 @router.post("/promote")
 async def promote_transport(
-    request: TransportPromoteRequest,
+    promote_req: TransportPromoteRequest,
+    request: Request,
     db: AsyncSession = Depends(get_db)
 ):
     try:
-        transport_id = request.transport_id
-        source_system = request.source_system
-        target_system = request.target_system
-        promoted_by = request.promoted_by
+        transport_id = promote_req.transport_id
+        source_system = promote_req.source_system
+        target_system = promote_req.target_system
+        promoted_by = promote_req.promoted_by
+        landscape = promote_req.landscape or "DEFAULT"
 
         result = await sap_service.promote_transport(transport_id, source_system, target_system)
         
@@ -90,26 +110,13 @@ async def promote_transport(
             existing_record.promoted_by = promoted_by
             existing_record.promoted_at = datetime.utcnow()
             existing_record.validation_report = result
+            existing_record.landscape = landscape
             await db.commit()
             await db.refresh(existing_record)
             
-            if existing_record.status == "success":
-                from backend.core.websocket_manager import manager
-                manager.add_event(
-                    event_type="TRANSPORT_PROMOTED",
-                    message=f"Transport {transport_id} promoted to {target_system}",
-                    transport_id=transport_id
-                )
-                await manager.broadcast()
-            
-            return {
-                "id": str(existing_record.id),
-                "transport_id": existing_record.transport_id,
-                "status": existing_record.status,
-                "message": result.get("message", "Transport promotion updated")
-            }
+            record = existing_record
         else:
-            new_record = TransportRecord(
+            record = TransportRecord(
                 transport_id=transport_id,
                 description=f"Transport {transport_id}",
                 source_system=source_system,
@@ -117,29 +124,140 @@ async def promote_transport(
                 status=result.get("status", "pending"),
                 promoted_by=promoted_by,
                 promoted_at=datetime.utcnow(),
-                validation_report=result
+                validation_report=result,
+                landscape=landscape
             )
-            db.add(new_record)
+            db.add(record)
             await db.commit()
-            await db.refresh(new_record)
+            await db.refresh(record)
             
-            if new_record.status == "success":
-                from backend.core.websocket_manager import manager
-                manager.add_event(
-                    event_type="TRANSPORT_PROMOTED",
-                    message=f"Transport {transport_id} promoted to {target_system}",
-                    transport_id=transport_id
+        if record.status == "success":
+            from backend.core.websocket_manager import manager
+            manager.add_event(
+                event_type="TRANSPORT_PROMOTED",
+                message=f"Transport {transport_id} promoted to {target_system}",
+                transport_id=transport_id
+            )
+            await manager.broadcast()
+            
+            # Send Slack notification
+            try:
+                await request.app.state.slack.notify_transport_promoted(
+                    transport_id=transport_id,
+                    source=source_system,
+                    target=target_system,
+                    promoted_by=promoted_by
                 )
-                await manager.broadcast()
+            except Exception as slack_err:
+                logger.error(f"Error sending Slack notification for promotion: {slack_err}")
             
-            return {
-                "id": str(new_record.id),
-                "transport_id": new_record.transport_id,
-                "status": new_record.status,
-                "message": result.get("message", "Transport promotion initiated")
-            }
+        return {
+            "id": str(record.id),
+            "transport_id": record.transport_id,
+            "status": record.status,
+            "message": result.get("message", "Transport promotion updated/initiated"),
+            "landscape": record.landscape
+        }
     except Exception as e:
         logger.error(f"Error promoting transport: {e}")
+        raise HTTPException(status_code=500, detail=str(e))
+
+
+@router.post("/{transport_id}/rollback")
+async def rollback_transport(
+    transport_id: str,
+    request: Request,
+    db: AsyncSession = Depends(get_db)
+):
+    try:
+        # Find original transport record
+        result = await db.execute(
+            select(TransportRecord).where(TransportRecord.transport_id == transport_id)
+        )
+        record = result.scalar_one_or_none()
+        
+        if not record:
+            raise HTTPException(status_code=404, detail="Transport not found")
+            
+        if record.status != "success":
+            raise HTTPException(status_code=400, detail="Can only rollback successful transports")
+            
+        current_target = record.target_system
+        current_source = record.source_system
+        landscape = record.landscape
+        
+        # Execute SAP BTP rollback
+        await sap_service.rollback_transport(transport_id, current_target)
+        
+        # New rollback record ID
+        rollback_id = f"{transport_id}_ROLLBACK"
+        
+        # Check if rollback record already exists
+        existing_q = await db.execute(
+            select(TransportRecord).where(TransportRecord.transport_id == rollback_id)
+        )
+        existing_record = existing_q.scalar_one_or_none()
+        
+        if existing_record:
+            new_record = existing_record
+            new_record.source_system = current_target
+            new_record.target_system = current_source
+            new_record.status = "in_progress"
+            new_record.promoted_by = "rollback"
+            new_record.promoted_at = datetime.utcnow()
+            new_record.completed_at = None
+            new_record.landscape = landscape
+        else:
+            new_record = TransportRecord(
+                transport_id=rollback_id,
+                description=f"Rollback of {transport_id} from {current_target} to {current_source}",
+                source_system=current_target,
+                target_system=current_source,
+                status="in_progress",
+                promoted_by="rollback",
+                promoted_at=datetime.utcnow(),
+                completed_at=None,
+                landscape=landscape,
+                validation_report={"rollback_status": "initiated"}
+            )
+            db.add(new_record)
+            
+        await db.commit()
+        await db.refresh(new_record)
+        
+        # WebSocket broadcast
+        from backend.core.websocket_manager import manager
+        manager.add_event(
+            event_type="TRANSPORT_ROLLBACK",
+            message=f"Rollback initiated for {transport_id} from {current_target} to {current_source}",
+            transport_id=rollback_id
+        )
+        await manager.broadcast()
+        
+        # Slack notification
+        try:
+            await request.app.state.slack.notify_transport_rollback(
+                transport_id=transport_id,
+                system=current_target
+            )
+        except Exception as slack_err:
+            logger.error(f"Error sending Slack notification for transport rollback: {slack_err}")
+            
+        return {
+            "id": str(new_record.id),
+            "transport_id": new_record.transport_id,
+            "status": new_record.status,
+            "description": new_record.description,
+            "source_system": new_record.source_system,
+            "target_system": new_record.target_system,
+            "promoted_by": new_record.promoted_by,
+            "promoted_at": new_record.promoted_at.isoformat(),
+            "landscape": new_record.landscape
+        }
+    except HTTPException:
+        raise
+    except Exception as e:
+        logger.error(f"Error executing rollback for transport {transport_id}: {e}")
         raise HTTPException(status_code=500, detail=str(e))
 
 
@@ -164,7 +282,8 @@ async def get_transport_details(transport_id: str, db: AsyncSession = Depends(ge
             "promoted_by": record.promoted_by,
             "promoted_at": record.promoted_at.isoformat(),
             "completed_at": record.completed_at.isoformat() if record.completed_at else None,
-            "validation_report": record.validation_report
+            "validation_report": record.validation_report,
+            "landscape": record.landscape
         }
     except HTTPException:
         raise

@@ -267,3 +267,136 @@ class SAPBTPService:
                 logger.warning(f"Failed to clear active transports cache: {e}")
                 
         return data
+
+    async def rollback_transport(self, transport_id: str, system: str) -> Dict:
+        """Rollback a transport on the target system."""
+        import asyncio
+        token = await self.auth_client.get_token() if self.auth_client else None
+        
+        if token is None:
+            logger.info("SAP BTP: using mock mode (no credentials or auth failed) for rollback")
+            await asyncio.sleep(2)
+            return {
+                "status": "rollback_initiated",
+                "transport_id": transport_id,
+                "estimated_duration": "5-10 minutes"
+            }
+        else:
+            try:
+                async with httpx.AsyncClient() as client:
+                    response = await client.post(
+                        f"{self.settings.SAP_BTP_API_BASE_URL}/api/transports/rollback",
+                        json={
+                            "transport_id": transport_id,
+                            "system": system
+                        },
+                        headers={"Authorization": f"Bearer {token}"},
+                        timeout=15.0
+                    )
+                    response.raise_for_status()
+                    self.is_live = True
+                    return response.json()
+            except Exception as e:
+                logger.warning(f"SAP BTP real API rollback call failed, falling back to mock: {e}")
+                self.is_live = False
+                await asyncio.sleep(2)
+                return {
+                    "status": "rollback_initiated",
+                    "transport_id": transport_id,
+                    "estimated_duration": "5-10 minutes"
+                }
+
+    async def test_connection(self) -> Dict:
+        """Actively test connection by getting an OAuth token and making a test API call."""
+        tested_at = datetime.utcnow().isoformat()
+        
+        # 1. Check if settings has valid credentials configured
+        if not self.settings.has_valid_sap_credentials:
+            return {
+                "token_obtained": False,
+                "api_reachable": False,
+                "error": "Missing or placeholder credentials in config",
+                "suggestions": [
+                    "Check your CLIENT_ID and CLIENT_SECRET",
+                    "Ensure SAP_BTP_CLIENT_ID and SAP_BTP_CLIENT_SECRET are set in your environment or .env file"
+                ],
+                "tested_at": tested_at
+            }
+            
+        # 2. Try to get token
+        token = None
+        token_err = None
+        
+        url = self.settings.SAP_BTP_TOKEN_URL.rstrip("/")
+        if not url.endswith("/oauth/token"):
+            url = f"{url}/oauth/token"
+            
+        try:
+            async with httpx.AsyncClient() as client:
+                response = await client.post(
+                    url,
+                    data={
+                        "grant_type": "client_credentials",
+                        "client_id": self.settings.SAP_BTP_CLIENT_ID,
+                        "client_secret": self.settings.SAP_BTP_CLIENT_SECRET,
+                    },
+                    headers={"Content-Type": "application/x-www-form-urlencoded"},
+                    timeout=10.0
+                )
+                if response.status_code != 200:
+                    token_err = f"HTTP {response.status_code}: {response.text}"
+                else:
+                    data = response.json()
+                    token = data.get("access_token")
+        except Exception as e:
+            token_err = str(e)
+            
+        if not token:
+            return {
+                "token_obtained": False,
+                "api_reachable": False,
+                "error": f"Token request failed: {token_err}",
+                "suggestions": [
+                    "Check your CLIENT_ID and CLIENT_SECRET",
+                    "Verify the Token URL format (e.g. https://[subaccount].authentication.[region].hana.ondemand.com)"
+                ],
+                "tested_at": tested_at
+            }
+            
+        # 3. Try to make test API call to /monitoring/health
+        api_err = None
+        try:
+            async with httpx.AsyncClient() as client:
+                response = await client.get(
+                    f"{self.settings.SAP_BTP_API_BASE_URL}/monitoring/health",
+                    headers={"Authorization": f"Bearer {token}"},
+                    timeout=10.0
+                )
+                if response.status_code != 200:
+                    api_err = f"{response.status_code} {response.reason_phrase} at /monitoring/health"
+                    if response.status_code == 404:
+                        api_err += " — your trial subaccount may not have this service enabled"
+                else:
+                    self.is_live = True
+                    return {
+                        "token_obtained": True,
+                        "api_reachable": True,
+                        "suggestions": [],
+                        "tested_at": tested_at
+                    }
+        except Exception as e:
+            api_err = str(e)
+            
+        return {
+            "token_obtained": True,
+            "api_reachable": False,
+            "error": api_err,
+            "suggestions": [
+                "Check that your SAP BTP subaccount has the 'SAP BTP Monitoring' service enabled",
+                "Try the SAP BTP Cockpit to verify your API URL format",
+                "Correct URL format: https://[subaccount-id].cfapps.[region].hana.ondemand.com"
+            ],
+            "tested_at": tested_at
+        }
+
+

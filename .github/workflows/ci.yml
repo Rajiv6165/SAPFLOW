@@ -18,8 +18,18 @@ on:
       - '**'
 
 jobs:
-  code-quality:
+  test:
     runs-on: ubuntu-latest
+    services:
+      redis:
+        image: redis:latest
+        ports:
+          - 6379:6379
+        options: >-
+          --health-cmd "redis-cli ping"
+          --health-interval 10s
+          --health-timeout 5s
+          --health-retries 5
     outputs:
       start_time: ${{ steps.record-start.outputs.start_time }}
     steps:
@@ -36,8 +46,10 @@ jobs:
           python-version: '3.11'
       
       - name: Install dependencies
+        working-directory: backend
         run: |
           pip install flake8 black pytest pytest-cov
+          pip install -r requirements.txt
       
       - name: Run flake8
         run: |
@@ -49,18 +61,23 @@ jobs:
           black --check backend/
       
       - name: Run pytest with coverage
+        working-directory: backend
+        env:
+          SAP_MOCK_MODE: "true"
+          DATABASE_URL: "sqlite+aiosqlite:///./test.db"
+          REDIS_URL: "redis://localhost:6379"
         run: |
-          pytest backend/ --cov=backend --cov-report=xml --cov-report=term
+          pytest tests/ -v --tb=short
       
       - name: Upload coverage
         uses: actions/upload-artifact@v3
         with:
           name: coverage-report
-          path: coverage.xml
+          path: backend/coverage.xml
 
   abap-validation:
     runs-on: ubuntu-latest
-    needs: code-quality
+    needs: test
     steps:
       - name: Checkout code
         uses: actions/checkout@v4
@@ -99,44 +116,42 @@ jobs:
             })
 
   notify:
+    needs: [test]
     runs-on: ubuntu-latest
-    needs: [code-quality, abap-validation]
     if: always()
     steps:
-      - name: Send Slack notification
-        uses: slackapi/slack-github-action@v1.24.0
-        with:
-          payload: |
-            {
-              "repo": "${{ github.repository }}",
-              "branch": "${{ github.ref_name }}",
-              "commit": "${{ github.sha }}",
-              "status": "${{ job.status }}",
-              "run_url": "${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}"
-            }
+      - name: Notify result
+        if: ${{ env.SLACK_WEBHOOK_URL != '' }}
         env:
           SLACK_WEBHOOK_URL: ${{ secrets.SLACK_WEBHOOK_URL }}
+        run: |
+          curl -X POST $SLACK_WEBHOOK_URL \
+            -H "Content-Type: application/json" \
+            -d '{"text": "SAPFlow CI: ${{ needs.test.result }}"}'
+      - name: Skip notification
+        if: ${{ env.SLACK_WEBHOOK_URL == '' }}
+        run: echo "Slack webhook not configured, skipping notification"
 
   report-to-sapflow:
-    needs: [code-quality, abap-validation]
+    needs: [test, abap-validation]
     runs-on: ubuntu-latest
     if: always()
     steps:
       - name: Report pipeline result to SAPFlow
         run: |
-          START_TIME="${{ needs.code-quality.outputs.start_time }}"
+          START_TIME="${{ needs.test.outputs.start_time }}"
           END_TIME=$(date -u +%s)
           DURATION=$((END_TIME - START_TIME))
           
           # Determine the overall pipeline conclusion
           CONCLUSION="success"
-          if [ "${{ needs.code-quality.result }}" = "failure" ] || \
+          if [ "${{ needs.test.result }}" = "failure" ] || \
              [ "${{ needs.abap-validation.result }}" = "failure" ]; then
             CONCLUSION="failure"
-          elif [ "${{ needs.code-quality.result }}" = "cancelled" ] || \
+          elif [ "${{ needs.test.result }}" = "cancelled" ] || \
                [ "${{ needs.abap-validation.result }}" = "cancelled" ]; then
             CONCLUSION="cancelled"
-          elif [ "${{ needs.code-quality.result }}" = "skipped" ] && \
+          elif [ "${{ needs.test.result }}" = "skipped" ] && \
                [ "${{ needs.abap-validation.result }}" = "skipped" ]; then
             CONCLUSION="skipped"
           fi

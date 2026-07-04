@@ -29,6 +29,7 @@ class Settings(BaseSettings):
     SAP_BTP_CLIENT_SECRET: str = ""
     SAP_BTP_TOKEN_URL: str = ""
     SAP_BTP_API_BASE_URL: str = ""
+    SLACK_WEBHOOK_URL: str = ""
 
     @property
     def has_valid_sap_credentials(self) -> bool:

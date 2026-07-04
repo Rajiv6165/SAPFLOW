@@ -4,10 +4,11 @@ from sqlalchemy.ext.asyncio import create_async_engine, AsyncSession
 from backend.models.database import Base, PipelineRun, SystemHealthSnapshot
 from backend.core.config import settings
 from backend.core.websocket_manager import manager
-from backend.routers import pipeline, transport, health, webhooks
+from backend.routers import pipeline, transport, health, webhooks, demo
 from backend.services.sap_btp import SAPBTPService
 from backend.services.aws_alerts import AWSAlertsService
 from backend.services.github_service import GitHubService
+from backend.services.slack_service import SlackService
 from fastapi.middleware.trustedhost import TrustedHostMiddleware
 import asyncio
 import logging
@@ -48,6 +49,7 @@ app.include_router(pipeline.router)
 app.include_router(transport.router)
 app.include_router(health.router)
 app.include_router(webhooks.router, prefix="/webhooks", tags=["webhooks"])
+app.include_router(demo.router)
 
 sap_service = SAPBTPService()
 aws_service = AWSAlertsService()
@@ -55,6 +57,7 @@ aws_service = AWSAlertsService()
 
 @app.on_event("startup")
 async def startup_event():
+    app.state.slack = SlackService(settings.SLACK_WEBHOOK_URL)
     if settings.is_production and settings.SAP_MOCK_MODE:
         logger.warning("⚠️ SAP MOCK MODE is ENABLED in production environment!")
 

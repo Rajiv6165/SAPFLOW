@@ -137,6 +137,20 @@ async def github_webhook(
             
             await db.commit()
 
+            # Trigger Slack Notification
+            try:
+                # payload can have html_url at top level or within workflow_run
+                run_url = workflow_run.get("html_url", "") or payload.get("html_url", "")
+                await request.app.state.slack.notify_pipeline_result(
+                    branch=run.branch,
+                    status=run.status,
+                    duration=run.duration_seconds or 0,
+                    run_url=run_url,
+                    commit=run.commit_sha
+                )
+            except Exception as e:
+                logger.error(f"Failed to send Slack pipeline notification: {e}")
+
             # Record custom metrics to CloudWatch
             try:
                 await aws_alerts.record_pipeline_result(

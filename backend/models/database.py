@@ -1,6 +1,8 @@
 from sqlalchemy import Column, String, DateTime, Integer, Float, JSON
 from sqlalchemy.ext.declarative import declarative_base
 from sqlalchemy.dialects.postgresql import UUID
+from sqlalchemy.ext.asyncio import create_async_engine
+from backend.core.config import settings
 import uuid
 from datetime import datetime
 
@@ -34,6 +36,7 @@ class TransportRecord(Base):
     promoted_at = Column(DateTime, default=datetime.utcnow, nullable=False)
     completed_at = Column(DateTime, nullable=True)
     validation_report = Column(JSON, nullable=True)
+    landscape = Column(String(50), default="DEFAULT", nullable=False, server_default="DEFAULT")
 
 
 class SystemHealthSnapshot(Base):
@@ -46,3 +49,13 @@ class SystemHealthSnapshot(Base):
     active_users = Column(Integer, nullable=False)
     avg_response_ms = Column(Integer, nullable=False)
     status = Column(String, nullable=False)  # healthy / degraded / down
+
+
+# Use check_same_thread=False for SQLite (tests only)
+if "sqlite" in settings.DATABASE_URL:
+    engine = create_async_engine(
+        settings.DATABASE_URL,
+        connect_args={"check_same_thread": False}
+    )
+else:
+    engine = create_async_engine(settings.DATABASE_URL)

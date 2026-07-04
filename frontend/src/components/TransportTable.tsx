@@ -10,13 +10,18 @@ export default function TransportTable() {
   const [filtered, setFiltered] = useState<TransportRecord[]>([]);
   const [searchTerm, setSearchTerm] = useState('');
   const [statusFilter, setStatusFilter] = useState('all');
+  const [landscapeFilter, setLandscapeFilter] = useState('all');
+  const [landscapes, setLandscapes] = useState<string[]>(['DEFAULT', 'FINANCE', 'LOGISTICS']);
   const [showModal, setShowModal] = useState(false);
+  const [showRollbackModal, setShowRollbackModal] = useState(false);
+  const [rollbackTarget, setRollbackTarget] = useState<TransportRecord | null>(null);
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [formData, setFormData] = useState({
     transport_id: '',
     source_system: 'DEV',
     target_system: 'QA',
     promoted_by: '',
+    landscape: 'DEFAULT',
   });
   const [notification, setNotification] = useState<NotificationType | null>(null);
   const [loading, setLoading] = useState(true);
@@ -39,7 +44,21 @@ export default function TransportTable() {
     }
   };
 
-  useEffect(() => { loadTransports(); }, []);
+  const loadLandscapes = async () => {
+    try {
+      const response = await api.getLandscapes();
+      if (response) {
+        setLandscapes(response);
+      }
+    } catch {
+      // fallback to default list
+    }
+  };
+
+  useEffect(() => {
+    loadTransports();
+    loadLandscapes();
+  }, []);
 
   useEffect(() => {
     let result = transports;
@@ -54,8 +73,11 @@ export default function TransportTable() {
     if (statusFilter !== 'all') {
       result = result.filter((t) => t.status === statusFilter);
     }
+    if (landscapeFilter !== 'all') {
+      result = result.filter((t) => (t.landscape || 'DEFAULT') === landscapeFilter);
+    }
     setFiltered(result);
-  }, [searchTerm, statusFilter, transports]);
+  }, [searchTerm, statusFilter, landscapeFilter, transports]);
 
   if (loading) {
     return (
@@ -109,11 +131,12 @@ export default function TransportTable() {
         formData.transport_id,
         formData.source_system,
         formData.target_system,
-        formData.promoted_by || 'manual'
+        formData.promoted_by || 'manual',
+        formData.landscape || 'DEFAULT'
       );
       showToast('success', `Transport ${formData.transport_id} promoted to ${formData.target_system}`);
       setShowModal(false);
-      setFormData({ transport_id: '', source_system: 'DEV', target_system: 'QA', promoted_by: '' });
+      setFormData({ transport_id: '', source_system: 'DEV', target_system: 'QA', promoted_by: '', landscape: 'DEFAULT' });
       await loadTransports();
     } catch {
       showToast('error', 'Failed to promote transport. Check backend logs.');
@@ -122,12 +145,67 @@ export default function TransportTable() {
     }
   };
 
+  const handleRollbackClick = (t: TransportRecord) => {
+    setRollbackTarget(t);
+    setShowRollbackModal(true);
+  };
+
+  const handleConfirmRollback = async () => {
+    if (!rollbackTarget) return;
+    const tid = rollbackTarget.transport_id;
+    setShowRollbackModal(false);
+    
+    // Optimistically update status
+    setTransports((prev) =>
+      prev.map((item) =>
+        item.transport_id === tid ? { ...item, status: 'rolling_back' as any } : item
+      )
+    );
+    
+    try {
+      await api.rollbackTransport(tid);
+      showToast('success', `Rollback initiated for ${tid}`);
+      await loadTransports();
+    } catch {
+      showToast('error', `Failed to initiate rollback for ${tid}`);
+      await loadTransports();
+    }
+  };
+
   const getStatusBadge = (status: string) => {
     switch (status) {
-      case 'success':     return <span className="badge-success">Success</span>;
-      case 'failed':      return <span className="badge-failed">Failed</span>;
-      case 'in_progress': return <span className="badge-in-progress">In Progress</span>;
-      default:            return <span className="badge-pending">Pending</span>;
+      case 'success':      return <span className="badge-success">Success</span>;
+      case 'failed':       return <span className="badge-failed">Failed</span>;
+      case 'in_progress':  return <span className="badge-in-progress">In Progress</span>;
+      case 'rolling_back': return (
+        <span className="px-2 py-0.5 rounded text-xs font-semibold" style={{ background: 'rgba(239,68,68,0.1)', color: '#f87171', border: '1px solid rgba(239,68,68,0.2)' }}>
+          Rolling Back
+        </span>
+      );
+      default:             return <span className="badge-pending">Pending</span>;
+    }
+  };
+
+  const getLandscapeBadge = (landscape: string) => {
+    switch (landscape) {
+      case 'FINANCE':
+        return (
+          <span className="px-1.5 py-0.5 rounded text-[10px] font-bold tracking-wider" style={{ background: 'rgba(59,130,246,0.12)', color: '#60a5fa', border: '1px solid rgba(59,130,246,0.2)' }}>
+            FINANCE
+          </span>
+        );
+      case 'LOGISTICS':
+        return (
+          <span className="px-1.5 py-0.5 rounded text-[10px] font-bold tracking-wider" style={{ background: 'rgba(16,185,129,0.12)', color: '#34d399', border: '1px solid rgba(16,185,129,0.2)' }}>
+            LOGISTICS
+          </span>
+        );
+      default:
+        return (
+          <span className="px-1.5 py-0.5 rounded text-[10px] font-bold tracking-wider" style={{ background: 'rgba(148,163,184,0.12)', color: '#94a3b8', border: '1px solid rgba(148,163,184,0.2)' }}>
+            DEFAULT
+          </span>
+        );
     }
   };
 
@@ -183,6 +261,25 @@ export default function TransportTable() {
               <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M3 4a1 1 0 011-1h16a1 1 0 011 1v2.586a1 1 0 01-.293.707l-6.414 6.414a1 1 0 00-.293.707V17l-4 4v-6.586a1 1 0 00-.293-.707L3.293 7.293A1 1 0 013 6.586V4z" />
             </svg>
             <select
+              id="transport-landscape-filter"
+              value={landscapeFilter}
+              onChange={(e) => setLandscapeFilter(e.target.value)}
+              className="select-dark pl-9"
+            >
+              <option value="all">All Landscapes</option>
+              {landscapes.map((l) => (
+                <option key={l} value={l}>{l}</option>
+              ))}
+            </select>
+          </div>
+          <div className="relative">
+            <svg
+              className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 pointer-events-none"
+              fill="none" viewBox="0 0 24 24" stroke="#6366f1"
+            >
+              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M3 4a1 1 0 011-1h16a1 1 0 011 1v2.586a1 1 0 01-.293.707l-6.414 6.414a1 1 0 00-.293.707V17l-4 4v-6.586a1 1 0 00-.293-.707L3.293 7.293A1 1 0 013 6.586V4z" />
+            </svg>
+            <select
               id="transport-status-filter"
               value={statusFilter}
               onChange={(e) => setStatusFilter(e.target.value)}
@@ -208,12 +305,13 @@ export default function TransportTable() {
                 <th>Status</th>
                 <th>Promoted By</th>
                 <th>Date</th>
+                <th>Actions</th>
               </tr>
             </thead>
             <tbody>
               {filtered.length === 0 ? (
                 <tr>
-                  <td colSpan={6} className="py-12 text-center">
+                  <td colSpan={7} className="py-12 text-center">
                     <div className="flex flex-col items-center gap-3">
                       <div
                         className="w-12 h-12 rounded-full flex items-center justify-center"
@@ -236,7 +334,10 @@ export default function TransportTable() {
                       </span>
                     </td>
                     <td className="max-w-xs">
-                      <span className="truncate block">{t.description}</span>
+                      <div className="flex items-center gap-2">
+                        {getLandscapeBadge(t.landscape || 'DEFAULT')}
+                        <span className="truncate block">{t.description}</span>
+                      </div>
                     </td>
                     <td>
                       <div className="flex items-center gap-1.5">
@@ -267,6 +368,27 @@ export default function TransportTable() {
                       <span className="text-xs tabular-nums" style={{ color: '#64748b' }}>
                         {formatDate(t.promoted_at)}
                       </span>
+                    </td>
+                    <td>
+                      {t.status === 'success' && (
+                        <button
+                          onClick={() => handleRollbackClick(t)}
+                          className="px-2 py-1 rounded text-xs font-bold transition-all flex items-center gap-1 cursor-pointer"
+                          style={{
+                            border: '1px solid rgba(239,68,68,0.4)',
+                            color: '#f87171',
+                            background: 'transparent',
+                          }}
+                          onMouseEnter={(e) => {
+                            e.currentTarget.style.background = 'rgba(239,68,68,0.1)';
+                          }}
+                          onMouseLeave={(e) => {
+                            e.currentTarget.style.background = 'transparent';
+                          }}
+                        >
+                          <span>↩</span> Rollback
+                        </button>
+                      )}
                     </td>
                   </tr>
                 ))
@@ -345,18 +467,35 @@ export default function TransportTable() {
                   </select>
                 </div>
               </div>
-              <div>
-                <label className="block text-xs font-semibold mb-1.5 uppercase tracking-wide" style={{ color: '#64748b' }}>
-                  Promoted By
-                </label>
-                <input
-                  id="modal-promoted-by"
-                  type="text"
-                  value={formData.promoted_by}
-                  onChange={(e) => setFormData({ ...formData, promoted_by: e.target.value })}
-                  placeholder="Your name or team"
-                  className="input-dark"
-                />
+              <div className="grid grid-cols-2 gap-3">
+                <div>
+                  <label className="block text-xs font-semibold mb-1.5 uppercase tracking-wide" style={{ color: '#64748b' }}>
+                    Landscape
+                  </label>
+                  <select
+                    id="modal-landscape"
+                    value={formData.landscape}
+                    onChange={(e) => setFormData({ ...formData, landscape: e.target.value })}
+                    className="select-dark"
+                  >
+                    {landscapes.map((l) => (
+                      <option key={l} value={l}>{l}</option>
+                    ))}
+                  </select>
+                </div>
+                <div>
+                  <label className="block text-xs font-semibold mb-1.5 uppercase tracking-wide" style={{ color: '#64748b' }}>
+                    Promoted By
+                  </label>
+                  <input
+                    id="modal-promoted-by"
+                    type="text"
+                    value={formData.promoted_by}
+                    onChange={(e) => setFormData({ ...formData, promoted_by: e.target.value })}
+                    placeholder="Your name"
+                    className="input-dark"
+                  />
+                </div>
               </div>
 
               {/* Route Preview */}
@@ -397,6 +536,50 @@ export default function TransportTable() {
                 ) : (
                   'Confirm Promote'
                 )}
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* ─── Rollback Confirmation Modal ───────────────────────────────── */}
+      {showRollbackModal && rollbackTarget && (
+        <div className="modal-overlay" onClick={() => setShowRollbackModal(false)}>
+          <div className="modal-panel" onClick={(e) => e.stopPropagation()}>
+            <div className="flex items-center justify-between mb-5">
+              <div>
+                <p className="section-title mb-1" style={{ color: '#ef4444' }}>ROLLBACK TRANSPORT</p>
+                <h3 className="card-title">Confirm Rollback</h3>
+              </div>
+              <button
+                onClick={() => setShowRollbackModal(false)}
+                className="w-8 h-8 rounded-lg flex items-center justify-center transition-colors"
+                style={{ background: 'rgba(148,163,184,0.08)', color: '#64748b' }}
+              >
+                ✕
+              </button>
+            </div>
+
+            <div className="space-y-4">
+              <p className="text-sm" style={{ color: '#e2e8f0', lineHeight: 1.6 }}>
+                Are you sure you want to rollback <span className="font-mono text-indigo-400 font-bold">{rollbackTarget.transport_id}</span> from <span className="font-bold text-emerald-400">{rollbackTarget.target_system}</span> to <span className="font-bold text-indigo-400">{rollbackTarget.source_system}</span>? This cannot be undone.
+              </p>
+            </div>
+
+            <div className="flex justify-end gap-3 mt-6">
+              <button onClick={() => setShowRollbackModal(false)} className="btn-ghost">
+                Cancel
+              </button>
+              <button
+                onClick={handleConfirmRollback}
+                className="px-4 py-2 rounded-xl text-sm font-semibold transition-all cursor-pointer"
+                style={{
+                  background: '#ef4444',
+                  color: '#fff',
+                  boxShadow: '0 0 12px rgba(239,68,68,0.2)'
+                }}
+              >
+                Confirm Rollback
               </button>
             </div>
           </div>

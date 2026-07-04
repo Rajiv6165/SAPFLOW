@@ -65,7 +65,14 @@ export const api = {
   getPipelineStatus: () => safeFetch<any>(`${BASE_URL}/pipeline/status`),
   getPipelineMetrics: () => safeFetch<PipelineMetrics[]>(`${BASE_URL}/pipeline/metrics`),
   getActiveTransports: () => safeFetch<{ transports: any[] }>(`${BASE_URL}/transport/active`),
-  getTransportHistory: () => safeFetch<{ transports: TransportRecord[] }>(`${BASE_URL}/transport/history`),
+  getTransportHistory: (landscape?: string) => {
+    const url = landscape && landscape !== 'all' ? `${BASE_URL}/transport/history?landscape=${landscape}` : `${BASE_URL}/transport/history`;
+    return safeFetch<{ transports: TransportRecord[] }>(url);
+  },
+  getLandscapes: () => safeFetch<string[]>(`${BASE_URL}/transport/landscapes`),
+  rollbackTransport: (transportId: string) => safeFetch<any>(`${BASE_URL}/transport/${transportId}/rollback`, {
+    method: 'POST'
+  }),
   promoteTransport: (...args: any[]) => {
     let bodyData;
     if (args.length === 1 && typeof args[0] === 'object') {
@@ -76,6 +83,7 @@ export const api = {
         source_system: args[1],
         target_system: args[2],
         promoted_by: args[3] || 'manual',
+        landscape: args[4] || 'DEFAULT',
       };
     }
     return safeFetch<any>(`${BASE_URL}/transport/promote`, {
@@ -85,6 +93,9 @@ export const api = {
   },
   getSystemHealth: () => safeFetch<SystemHealth>(`${BASE_URL}/health/system`),
   getSapConnectionStatus: () => fetch(`${BASE_URL}/health/sap-connection`).then(r => r.json()),
+  testSapConnection: () => safeFetch<any>(`${BASE_URL}/health/sap-connection/test`, {
+    method: 'POST'
+  }),
   getHealthHistory: (limit?: number) => {
     const url = limit ? `${BASE_URL}/health/history?limit=${limit}` : `${BASE_URL}/health/history`;
     return safeFetch<any[]>(url);
@@ -100,5 +111,8 @@ export const api = {
   triggerPipeline: (branch: string) => safeFetch<any>(`${BASE_URL}/pipeline/trigger`, {
     method: 'POST',
     body: JSON.stringify({ branch }),
+  }),
+  resetDemoData: () => safeFetch<any>(`${BASE_URL}/demo/reset`, {
+    method: 'POST'
   }),
 };

@@ -25,50 +25,77 @@ export default function Home() {
     systemStatus: 'unknown',
   });
 
-  useEffect(() => {
-    const fetchStats = async () => {
-      try {
-        const [pipelineData, transportsData, healthData] = await Promise.allSettled([
-          api.getPipelineStatus(),
-          api.getActiveTransports(),
-          api.getSystemHealth(),
-        ]);
+  const [connectionStatus, setConnectionStatus] = useState<any>(null);
+  const [isResetting, setIsResetting] = useState(false);
+  const [bannerDismissed, setBannerDismissed] = useState(false);
+  const [refreshKey, setRefreshKey] = useState(0);
 
-        const today = new Date().toDateString();
-        let runsToday = 0;
-        let successCount = 0;
+  const fetchStats = async () => {
+    try {
+      const [pipelineData, transportsData, healthData] = await Promise.allSettled([
+        api.getPipelineStatus(),
+        api.getActiveTransports(),
+        api.getSystemHealth(),
+      ]);
 
-        if (pipelineData.status === 'fulfilled' && pipelineData.value) {
-          const todaysRuns = (pipelineData.value.last_runs || []).filter(
-            (r: any) => new Date(r.triggered_at).toDateString() === today
-          );
-          runsToday = todaysRuns.length;
-          successCount = todaysRuns.filter((r: any) => r.status === 'success').length;
-        }
+      const today = new Date().toDateString();
+      let runsToday = 0;
+      let successCount = 0;
 
-        const activeCount =
-          transportsData.status === 'fulfilled' && transportsData.value
-            ? (transportsData.value.transports || []).length
-            : 0;
-
-        const sysStatus =
-          healthData.status === 'fulfilled' && healthData.value ? healthData.value.status : 'unknown';
-
-        setStats({
-          totalRunsToday: runsToday,
-          successRate: runsToday > 0 ? Math.round((successCount / runsToday) * 100) : 0,
-          activeTransports: activeCount,
-          systemStatus: sysStatus as DashboardStats['systemStatus'],
-        });
-      } catch {
-        // stats remain at defaults
+      if (pipelineData.status === 'fulfilled' && pipelineData.value) {
+        const todaysRuns = (pipelineData.value.last_runs || []).filter(
+          (r: any) => new Date(r.triggered_at).toDateString() === today
+        );
+        runsToday = todaysRuns.length;
+        successCount = todaysRuns.filter((r: any) => r.status === 'success').length;
       }
-    };
 
+      const activeCount =
+        transportsData.status === 'fulfilled' && transportsData.value
+          ? (transportsData.value.transports || []).length
+          : 0;
+
+      const sysStatus =
+        healthData.status === 'fulfilled' && healthData.value ? healthData.value.status : 'unknown';
+
+      setStats({
+        totalRunsToday: runsToday,
+        successRate: runsToday > 0 ? Math.round((successCount / runsToday) * 100) : 0,
+        activeTransports: activeCount,
+        systemStatus: sysStatus as DashboardStats['systemStatus'],
+      });
+    } catch {
+      // stats remain at defaults
+    }
+  };
+
+  const fetchConnection = async () => {
+    try {
+      const conn = await api.getSapConnectionStatus();
+      setConnectionStatus(conn);
+    } catch {
+      // failed
+    }
+  };
+
+  useEffect(() => {
     fetchStats();
+    fetchConnection();
     const interval = setInterval(fetchStats, 30000);
     return () => clearInterval(interval);
-  }, []);
+  }, [refreshKey]);
+
+  const handleResetDemo = async () => {
+    setIsResetting(true);
+    try {
+      await api.resetDemoData();
+      setRefreshKey((prev) => prev + 1);
+    } catch {
+      alert('Failed to reset demo data.');
+    } finally {
+      setIsResetting(false);
+    }
+  };
 
   const totalRuns = wsData ? wsData.summary.total_runs_today : stats.totalRunsToday;
   const successRate = wsData ? wsData.summary.success_rate : stats.successRate;
@@ -85,10 +112,61 @@ export default function Home() {
   const currentStatus = isLoading ? 'unknown' : systemStatus;
   const statusCfg = systemStatusConfig[currentStatus as keyof typeof systemStatusConfig] || systemStatusConfig.unknown;
 
-  return (
-    <div className="space-y-6 animate-fade-in">
+  const showDemoBanner = connectionStatus && connectionStatus.mode === 'mock' && !connectionStatus.has_credentials && !bannerDismissed;
 
-      {/* ─── Live Status Banner ──────────────────────────────────────── */}
+  return (
+    <div className="space-y-6 animate-fade-in" key={refreshKey}>
+
+      {/* ─── Demo Mode Banner ────────────────────────────────────────── */}
+      {showDemoBanner && (
+        <div
+          className="flex items-center justify-between px-4 py-2.5 rounded-xl text-xs font-semibold transition-all duration-300"
+          style={{
+            background: 'rgba(148,163,184,0.08)',
+            border: '1px solid rgba(148,163,184,0.15)',
+            color: '#94a3b8',
+          }}
+        >
+          <div className="flex items-center gap-2 flex-wrap">
+            <span>⚪ Running in demo mode — SAP BTP mock data active</span>
+            <span className="text-slate-700">|</span>
+            <button
+              onClick={handleResetDemo}
+              disabled={isResetting}
+              className="text-indigo-400 hover:text-indigo-300 cursor-pointer font-bold disabled:opacity-50 flex items-center gap-1 bg-transparent border-none p-0"
+            >
+              {isResetting ? (
+                <>
+                  <svg className="w-3 h-3 animate-spin inline" fill="none" viewBox="0 0 24 24">
+                    <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4" />
+                    <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4z" />
+                  </svg>
+                  Resetting...
+                </>
+              ) : (
+                'Reset Demo Data'
+              )}
+            </button>
+            <span className="text-slate-700">|</span>
+            <a
+              href="https://github.com/Rajiv6165/sapflow#readme"
+              target="_blank"
+              rel="noopener noreferrer"
+              className="text-indigo-400 hover:text-indigo-300 cursor-pointer font-bold"
+            >
+              View Real Setup Guide
+            </a>
+          </div>
+          <button
+            onClick={() => setBannerDismissed(true)}
+            className="w-5 h-5 flex items-center justify-center rounded-full hover:bg-slate-800 text-slate-400 hover:text-slate-200 transition-colors bg-transparent border-none cursor-pointer"
+          >
+            ✕
+          </button>
+        </div>
+      )}
+
+      {/* ─── Live Status Header ──────────────────────────────────────── */}
       <div className="flex items-center justify-between flex-wrap gap-3">
         <div>
           <h2

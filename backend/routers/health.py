@@ -1,6 +1,6 @@
 from fastapi import APIRouter, HTTPException
 from backend.services.sap_btp import SAPBTPService
-from backend.models.database import SystemHealthSnapshot
+from backend.models.database import SystemHealthSnapshot, engine
 from sqlalchemy.ext.asyncio import AsyncSession
 from backend.core.config import settings
 import logging
@@ -29,6 +29,16 @@ async def get_sap_connection():
         raise HTTPException(status_code=500, detail=str(e))
 
 
+@router.post("/sap-connection/test")
+async def test_sap_connection():
+    try:
+        result = await sap_service.test_connection()
+        return result
+    except Exception as e:
+        logger.error(f"Error testing SAP connection: {e}")
+        raise HTTPException(status_code=500, detail=str(e))
+
+
 @router.get("/system")
 async def get_system_health():
     try:
@@ -42,11 +52,7 @@ async def get_system_health():
 @router.get("/history")
 async def get_health_history(limit: int = 48):
     from sqlalchemy import select
-    from backend.core.config import settings
-    from sqlalchemy.ext.asyncio import create_async_engine, AsyncSession
-    from backend.models.database import SystemHealthSnapshot, Base
     
-    engine = create_async_engine(settings.DATABASE_URL, echo=False)
     async with AsyncSession(engine) as session:
         try:
             result = await session.execute(

@@ -7,7 +7,16 @@
 [![CI](https://github.com/Rajiv6165/sapflow/actions/workflows/ci.yml/badge.svg)](https://github.com/Rajiv6165/sapflow/actions/workflows/ci.yml) [![Deploy](https://github.com/Rajiv6165/sapflow/actions/workflows/deploy.yml/badge.svg)](https://github.com/Rajiv6165/sapflow/actions/workflows/deploy.yml)
 
 ## 🚀 Live Demo
-[ALB URL once deployed] | [Demo video link if recorded]
+
+> Deploy with `terraform apply` to get your own live URL.
+> See [Deployment Guide](#deployment) below.
+
+| Endpoint | Description |
+|----------|-------------|
+| `/` | Real-time monitoring dashboard |
+| `/docs` | Interactive FastAPI documentation |
+| `/health` | System health check |
+| `/webhooks/github` | GitHub Actions webhook receiver |
 
 ## 📐 Architecture
 
@@ -46,6 +55,40 @@
 | **SAP Integration** | SAP BTP APIs, ABAP Code Inspector |
 | **Infrastructure** | Terraform |
 
+## 🚢 Deployment
+
+### Prerequisites
+- AWS CLI configured (`aws configure`)
+- Terraform >= 1.0 installed
+- Docker Desktop running
+
+### Deploy to AWS
+```bash
+# 1. Initialize Terraform
+cd infra/terraform
+terraform init
+
+# 2. Plan infrastructure (~35 AWS resources)
+terraform plan -var="db_password=YourPass" -var="alert_email=you@email.com" ...
+
+# 3. Apply (creates VPC, ECS, RDS, ALB, CloudWatch, SNS)
+terraform apply
+
+# 4. Build and push Docker images + deploy to ECS
+cd ../..
+chmod +x scripts/deploy.sh
+./scripts/deploy.sh
+
+# 5. Open your live dashboard
+echo "Dashboard: http://$(cd infra/terraform && terraform output -raw alb_dns_name)"
+```
+
+### Tear Down (stop AWS charges)
+```bash
+chmod +x scripts/destroy.sh
+./scripts/destroy.sh
+```
+
 ## 🏃 Quick Start
 
 ### 1. Clone and Setup Environment
@@ -82,6 +125,11 @@ This project works in two modes:
 - Real-time systems (WebSocket, event-driven architecture)
 - Graceful degradation and fault-tolerant API integration design
 - Production-grade CI/CD with GitHub Actions
+
+## 🤝 Contributing
+
+This is a portfolio project but PRs are welcome. 
+Open an issue first to discuss what you'd like to change.
 
 ## 📷 Screenshots
 [Add dashboard screenshots here]

@@ -1,23 +1,15 @@
 from fastapi import APIRouter, HTTPException, Depends, Request
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy import select, func
-from backend.models.database import PipelineRun
-from backend.models.schemas import PipelineTriggerRequest
-from backend.core.config import settings
-from sqlalchemy.ext.asyncio import create_async_engine
-import httpx
-import logging
-from datetime import datetime, timedelta
-
-logger = logging.getLogger(__name__)
+from backend.models.database import PipelineRun, engine
 
 router = APIRouter(prefix="/pipeline", tags=["pipeline"])
 
 
 async def get_db():
-    engine = create_async_engine(settings.DATABASE_URL, echo=False)
     async with AsyncSession(engine) as session:
         yield session
+
 
 
 @router.get("/status")
