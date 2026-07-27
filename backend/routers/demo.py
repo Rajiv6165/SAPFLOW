@@ -17,6 +17,7 @@ LAST_RESET_TIME = datetime.utcnow().isoformat()
 
 @router.post("/reset")
 async def reset_demo():
+    """Reset and seed demo database. No params. Writes seed data to DB, broadcasts WS. Returns success status."""
     global LAST_RESET_TIME
     try:
         logger.info("Initiating demo data reset...")
@@ -42,6 +43,7 @@ async def reset_demo():
 
 @router.get("/status")
 async def get_demo_status():
+    """Get demo database status. No params. Returns counts of runs, transports, snapshots, and last reset time. No side effects."""
     try:
         async with AsyncSession(engine) as session:
             runs_q = await session.execute(select(func.count(PipelineRun.id)))

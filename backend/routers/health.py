@@ -15,11 +15,13 @@ sap_service = SAPBTPService()
 @router.get("")
 @router.get("/")
 async def root_health():
+    """Health check endpoint. Returns service status. No params. Returns status object."""
     return {"status": "ok", "service": "sapflow-backend"}
 
 
 @router.get("/sap-connection")
 async def get_sap_connection():
+    """Get SAP BTP connection status. No params. Returns connection status with timestamp."""
     try:
         status = sap_service.get_connection_status()
         status["last_checked"] = datetime.utcnow().isoformat()
@@ -31,6 +33,7 @@ async def get_sap_connection():
 
 @router.post("/sap-connection/test")
 async def test_sap_connection():
+    """Test SAP BTP connection. No params. Returns test result. No side effects."""
     try:
         result = await sap_service.test_connection()
         return result
@@ -41,6 +44,7 @@ async def test_sap_connection():
 
 @router.get("/system")
 async def get_system_health():
+    """Get SAP system health metrics. No params. Returns CPU, memory, users, response time. No side effects."""
     try:
         health_data = await sap_service.get_system_health()
         return health_data
@@ -51,6 +55,7 @@ async def get_system_health():
 
 @router.get("/history")
 async def get_health_history(limit: int = 48):
+    """Get health history from DB. Query param: limit (default 48). Returns list of snapshots. No side effects."""
     from sqlalchemy import select
     
     async with AsyncSession(engine) as session:

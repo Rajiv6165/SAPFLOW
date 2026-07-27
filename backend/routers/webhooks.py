@@ -29,6 +29,7 @@ async def github_webhook(
     x_hub_signature_256: str = Header(...),
     db: AsyncSession = Depends(get_db)
 ):
+    """Handle GitHub webhooks (workflow_run, push, workflow_job). Headers: event, signature. Writes to DB, broadcasts WS, sends Slack, records CloudWatch metrics."""
     body = await request.body()
     
     # 1. Verify Webhook Signature

@@ -2,6 +2,10 @@ from fastapi import APIRouter, HTTPException, Depends, Request
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy import select, func
 from backend.models.database import PipelineRun, engine
+from datetime import datetime, timedelta
+import logging
+
+logger = logging.getLogger(__name__)
 
 router = APIRouter(prefix="/pipeline", tags=["pipeline"])
 
@@ -14,6 +18,7 @@ async def get_db():
 
 @router.get("/status")
 async def get_pipeline_status(request: Request, db: AsyncSession = Depends(get_db)):
+    """Get recent pipeline runs with job details. No params. Returns current status and last 10 runs. No side effects."""
     try:
         result = await db.execute(
             select(PipelineRun)
@@ -57,6 +62,7 @@ async def get_pipeline_status(request: Request, db: AsyncSession = Depends(get_d
 
 @router.get("/runs/{run_id}")
 async def get_pipeline_run(run_id: str, db: AsyncSession = Depends(get_db)):
+    """Get specific pipeline run details. Path param: run_id. Returns run details or 404. No side effects."""
     try:
         result = await db.execute(
             select(PipelineRun).where(PipelineRun.run_id == run_id)
@@ -86,6 +92,7 @@ async def get_pipeline_run(run_id: str, db: AsyncSession = Depends(get_db)):
 
 @router.post("/trigger")
 async def trigger_pipeline(request: Request, payload: PipelineTriggerRequest):
+    """Trigger GitHub workflow. Body: branch. Triggers CI workflow via GitHub. No DB writes."""
     github_service = getattr(request.app.state, "github", None)
     if not github_service:
         raise HTTPException(status_code=500, detail="GitHub service not available")
@@ -100,6 +107,7 @@ async def trigger_pipeline(request: Request, payload: PipelineTriggerRequest):
 
 @router.post("/sync")
 async def sync_pipeline(request: Request, db: AsyncSession = Depends(get_db)):
+    """Sync GitHub runs to DB. No params. Writes runs to DB. Returns count synced."""
     github_service = getattr(request.app.state, "github", None)
     if not github_service:
         raise HTTPException(status_code=500, detail="GitHub service not available")
@@ -114,6 +122,7 @@ async def sync_pipeline(request: Request, db: AsyncSession = Depends(get_db)):
 
 @router.get("/runs/{run_id}/jobs")
 async def get_run_jobs(run_id: str, request: Request):
+    """Get jobs for a pipeline run. Path param: run_id. Returns job list from GitHub. No side effects."""
     github_service = getattr(request.app.state, "github", None)
     if not github_service:
         raise HTTPException(status_code=500, detail="GitHub service not available")
@@ -128,6 +137,7 @@ async def get_run_jobs(run_id: str, request: Request):
 
 @router.get("/metrics")
 async def get_pipeline_metrics(db: AsyncSession = Depends(get_db)):
+    """Get pipeline metrics (30 days). No params. Returns daily success/failed counts. No side effects."""
     try:
         thirty_days_ago = datetime.utcnow() - timedelta(days=30)
         

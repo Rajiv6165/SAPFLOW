@@ -22,6 +22,7 @@ async def get_db():
 
 @router.get("/active")
 async def get_active_transports():
+    """Get active transports from SAP BTP. No params. Returns list of active transports. No side effects."""
     try:
         transports = await sap_service.get_active_transports()
         return {"transports": transports}
@@ -32,6 +33,7 @@ async def get_active_transports():
 
 @router.get("/landscapes")
 async def get_landscapes(db: AsyncSession = Depends(get_db)):
+    """Get available transport landscapes. No params. Returns list of landscape names from DB. No side effects."""
     try:
         result = await db.execute(select(TransportRecord.landscape).distinct())
         landscapes = result.scalars().all()
@@ -49,6 +51,7 @@ async def get_transport_history(
     landscape: Optional[str] = None,
     db: AsyncSession = Depends(get_db)
 ):
+    """Get transport history from DB. Query param: landscape. Returns last 50 transports. No side effects."""
     try:
         query = select(TransportRecord)
         if landscape and landscape != "all" and landscape.strip() != "":
@@ -88,6 +91,7 @@ async def promote_transport(
     request: Request,
     db: AsyncSession = Depends(get_db)
 ):
+    """Promote transport between systems. Body: transport_id, source, target, landscape. Writes to DB, broadcasts WS, sends Slack."""
     try:
         transport_id = promote_req.transport_id
         source_system = promote_req.source_system
@@ -169,6 +173,7 @@ async def rollback_transport(
     request: Request,
     db: AsyncSession = Depends(get_db)
 ):
+    """Rollback transport to previous system. Path param: transport_id. Writes rollback record, broadcasts WS, sends Slack."""
     try:
         # Find original transport record
         result = await db.execute(
@@ -263,6 +268,7 @@ async def rollback_transport(
 
 @router.get("/{transport_id}")
 async def get_transport_details(transport_id: str, db: AsyncSession = Depends(get_db)):
+    """Get transport details by ID. Path param: transport_id. Returns transport record or 404. No side effects."""
     try:
         result = await db.execute(
             select(TransportRecord).where(TransportRecord.transport_id == transport_id)
@@ -294,6 +300,7 @@ async def get_transport_details(transport_id: str, db: AsyncSession = Depends(ge
 
 @router.post("/validate")
 async def validate_transport(transport_id: str):
+    """Validate transport via ABAP inspection. Query param: transport_id. Returns inspection and validation report. No side effects."""
     try:
         from transport_runner.abap_inspector import ABAPInspector
         from transport_runner.transport_validator import TransportValidator
