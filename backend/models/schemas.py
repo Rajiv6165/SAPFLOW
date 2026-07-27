@@ -1,6 +1,7 @@
-from pydantic import BaseModel, UUID4
+from pydantic import BaseModel, UUID4, field_validator, ValidationError
 from typing import Optional, List, Any, Dict
 from datetime import datetime
+import re
 
 
 # ─── Pipeline Schemas ──────────────────────────────────────────────────────────
@@ -55,6 +56,28 @@ class TransportPromoteRequest(BaseModel):
     source_system: str  # DEV / QA
     target_system: str  # QA / PROD
     promoted_by: str = "system"
+    landscape: Optional[str] = "DEFAULT"
+
+    @field_validator("transport_id")
+    @classmethod
+    def validate_transport_id(cls, v: str) -> str:
+        if not v or not v.strip():
+            raise ValueError("transport_id cannot be empty")
+        # SAP transport ID format: e.g., DEVK900123, QAK900456
+        pattern = r'^[A-Z]{3}K\d{6}$'
+        if not re.match(pattern, v):
+            raise ValueError("transport_id must match SAP format (e.g., DEVK900123)")
+        return v
+
+    @field_validator("target_system")
+    @classmethod
+    def validate_target_system(cls, v: str) -> str:
+        valid_systems = ["DEV", "QA", "PROD"]
+        if v not in valid_systems:
+            raise ValueError(f"target_system must be one of: {', '.join(valid_systems)}")
+        if v == "DEV":
+            raise ValueError("Cannot promote to DEV (backwards promotion not allowed)")
+        return v
 
 
 class TransportRecordResponse(BaseModel):
