@@ -18,7 +18,13 @@ from datetime import datetime
 logging.basicConfig(level=logging.INFO)
 logger = logging.getLogger(__name__)
 
-app = FastAPI(title="SAPFlow API", version="1.0.0")
+app = FastAPI(
+    title="SAPFlow API",
+    version="1.0.0",
+    openapi_url="/api/v1/openapi.json",
+    docs_url="/docs",
+    redoc_url="/redoc"
+)
 
 # Request Logging Middleware
 @app.middleware("http")
@@ -45,11 +51,11 @@ app.add_middleware(
     allow_headers=["*"],
 )
 
-app.include_router(pipeline.router)
-app.include_router(transport.router)
-app.include_router(health.router)
-app.include_router(webhooks.router, prefix="/webhooks", tags=["webhooks"])
-app.include_router(demo.router)
+app.include_router(pipeline.router, prefix="/api/v1")
+app.include_router(transport.router, prefix="/api/v1")
+app.include_router(health.router, prefix="/api/v1")
+app.include_router(webhooks.router, prefix="/api/v1/webhooks", tags=["webhooks"])
+app.include_router(demo.router, prefix="/api/v1")
 
 sap_service = SAPBTPService()
 aws_service = AWSAlertsService()

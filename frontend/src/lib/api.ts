@@ -50,27 +50,27 @@ const safeFetch = async <T>(url: string, options?: RequestInit): Promise<T | nul
       },
     });
     if (!response.ok) {
-      console.warn(`Fetch returned status ${response.status} for ${url}`);
+      console.warn(\Fetch returned status \ for \);
       return null;
     }
     return await response.json();
   } catch (error) {
-    console.error(`Fetch error for ${url}:`, error);
+    console.error(\Fetch error for \:\, error);
     return null;
   }
 };
 
 export const api = {
-  getPipelineRuns: () => safeFetch<any>(`${BASE_URL}/pipeline/status`),
-  getPipelineStatus: () => safeFetch<any>(`${BASE_URL}/pipeline/status`),
-  getPipelineMetrics: () => safeFetch<PipelineMetrics[]>(`${BASE_URL}/pipeline/metrics`),
-  getActiveTransports: () => safeFetch<{ transports: any[] }>(`${BASE_URL}/transport/active`),
+  getPipelineRuns: () => safeFetch<any>(\/api/v1/pipeline/status\),
+  getPipelineStatus: () => safeFetch<any>(\/api/v1/pipeline/status\),
+  getPipelineMetrics: () => safeFetch<PipelineMetrics[]>(\/api/v1/pipeline/metrics\),
+  getActiveTransports: () => safeFetch<{ transports: any[] }>(\/api/v1/transport/active\),
   getTransportHistory: (landscape?: string) => {
-    const url = landscape && landscape !== 'all' ? `${BASE_URL}/transport/history?landscape=${landscape}` : `${BASE_URL}/transport/history`;
+    const url = landscape && landscape !== 'all' ? \/api/v1/transport/history?landscape=\ : \/api/v1/transport/history\;
     return safeFetch<{ transports: TransportRecord[] }>(url);
   },
-  getLandscapes: () => safeFetch<string[]>(`${BASE_URL}/transport/landscapes`),
-  rollbackTransport: (transportId: string) => safeFetch<any>(`${BASE_URL}/transport/${transportId}/rollback`, {
+  getLandscapes: () => safeFetch<string[]>(\/api/v1/transport/landscapes\),
+  rollbackTransport: (transportId: string) => safeFetch<any>(\/api/v1/transport/\/rollback\, {
     method: 'POST'
   }),
   promoteTransport: (...args: any[]) => {
@@ -86,33 +86,33 @@ export const api = {
         landscape: args[4] || 'DEFAULT',
       };
     }
-    return safeFetch<any>(`${BASE_URL}/transport/promote`, {
+    return safeFetch<any>(\/api/v1/transport/promote\, {
       method: 'POST',
       body: JSON.stringify(bodyData),
     });
   },
-  getSystemHealth: () => safeFetch<SystemHealth>(`${BASE_URL}/health/system`),
-  getSapConnectionStatus: () => fetch(`${BASE_URL}/health/sap-connection`).then(r => r.json()),
-  testSapConnection: () => safeFetch<any>(`${BASE_URL}/health/sap-connection/test`, {
+  getSystemHealth: () => safeFetch<SystemHealth>(\/api/v1/health/system\),
+  getSapConnectionStatus: () => fetch(\/api/v1/health/sap-connection\).then(r => r.json()),
+  testSapConnection: () => safeFetch<any>(\/api/v1/health/sap-connection/test\, {
     method: 'POST'
   }),
   getHealthHistory: (limit?: number) => {
-    const url = limit ? `${BASE_URL}/health/history?limit=${limit}` : `${BASE_URL}/health/history`;
+    const url = limit ? \/api/v1/health/history?limit=\ : \/api/v1/health/history\;
     return safeFetch<any[]>(url);
   },
-  getTransportDetails: (transportId: string) => safeFetch<TransportRecord>(`${BASE_URL}/transport/${transportId}`),
-  validateTransport: (transportId: string) => safeFetch<any>(`${BASE_URL}/transport/validate?transport_id=${transportId}`, {
+  getTransportDetails: (transportId: string) => safeFetch<TransportRecord>(\/api/v1/transport/\),
+  validateTransport: (transportId: string) => safeFetch<any>(\/api/v1/transport/validate?transport_id=\, {
     method: 'POST',
   }),
-  getRunJobs: (runId: string) => safeFetch<any>(`${BASE_URL}/pipeline/runs/${runId}/jobs`),
-  syncPipeline: () => safeFetch<any>(`${BASE_URL}/pipeline/sync`, {
+  getRunJobs: (runId: string) => safeFetch<any>(\/api/v1/pipeline/runs/\/jobs\),
+  syncPipeline: () => safeFetch<any>(\/api/v1/pipeline/sync\, {
     method: 'POST',
   }),
-  triggerPipeline: (branch: string) => safeFetch<any>(`${BASE_URL}/pipeline/trigger`, {
+  triggerPipeline: (branch: string) => safeFetch<any>(\/api/v1/pipeline/trigger\, {
     method: 'POST',
     body: JSON.stringify({ branch }),
   }),
-  resetDemoData: () => safeFetch<any>(`${BASE_URL}/demo/reset`, {
+  resetDemoData: () => safeFetch<any>(\/api/v1/demo/reset\, {
     method: 'POST'
   }),
 };

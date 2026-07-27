@@ -72,7 +72,7 @@ export function usePipelineWebSocket(url: string = WS_URL) {
           const delay = Math.pow(2, reconnectAttemptsRef.current) * 1000;
           reconnectAttemptsRef.current++;
           setReconnectCount(reconnectAttemptsRef.current);
-          console.log(`Reconnecting in ${delay}ms... (attempt ${reconnectAttemptsRef.current})`);
+          console.log(\Reconnecting in \ms... (attempt \)\);
           setTimeout(connect, delay);
         }
       };
