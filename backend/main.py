@@ -1,15 +1,19 @@
-from fastapi import FastAPI, WebSocket, WebSocketDisconnect, Depends
+from fastapi import FastAPI, WebSocket, WebSocketDisconnect, Depends, Request
+from fastapi.responses import JSONResponse
 from fastapi.middleware.cors import CORSMiddleware
 from sqlalchemy.ext.asyncio import create_async_engine, AsyncSession
 from backend.models.database import Base, PipelineRun, SystemHealthSnapshot
 from backend.core.config import settings
 from backend.core.websocket_manager import manager
+from backend.core.limiter import limiter
 from backend.routers import pipeline, transport, health, webhooks, demo
 from backend.services.sap_btp import SAPBTPService
 from backend.services.aws_alerts import AWSAlertsService
 from backend.services.github_service import GitHubService
 from backend.services.slack_service import SlackService
 from fastapi.middleware.trustedhost import TrustedHostMiddleware
+from slowapi.errors import RateLimitExceeded
+from slowapi.middleware import SlowAPIMiddleware
 import asyncio
 import logging
 import time
@@ -18,6 +22,19 @@ from datetime import datetime
 logging.basicConfig(level=logging.INFO)
 logger = logging.getLogger(__name__)
 
+
+def _rate_limit_exceeded_handler(request: Request, exc: RateLimitExceeded):
+    response = JSONResponse(
+        status_code=429,
+        content={"detail": f"Rate limit exceeded: {exc.detail}"}
+    )
+    if hasattr(request.state, "rate_limit"):
+        response = request.app.state.limiter._inject_headers(
+            response, request.state.rate_limit
+        )
+    return response
+
+
 app = FastAPI(
     title="SAPFlow API",
     version="1.0.0",
@@ -25,6 +42,11 @@ app = FastAPI(
     docs_url="/docs",
     redoc_url="/redoc"
 )
+
+app.state.limiter = limiter
+app.add_exception_handler(RateLimitExceeded, _rate_limit_exceeded_handler)
+app.add_middleware(SlowAPIMiddleware)
+
 
 # Request Logging Middleware
 @app.middleware("http")

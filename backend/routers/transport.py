@@ -5,6 +5,7 @@ from backend.models.database import TransportRecord, engine
 from backend.services.sap_btp import SAPBTPService
 from backend.core.config import settings
 from backend.models.schemas import TransportPromoteRequest
+from backend.core.limiter import limiter
 from datetime import datetime
 import logging
 from typing import Optional
@@ -86,9 +87,10 @@ async def get_transport_history(
 
 
 @router.post("/promote")
+@limiter.limit("10/minute")
 async def promote_transport(
-    promote_req: TransportPromoteRequest,
     request: Request,
+    promote_req: TransportPromoteRequest,
     db: AsyncSession = Depends(get_db)
 ):
     """Promote transport between systems. Body: transport_id, source, target, landscape. Writes to DB, broadcasts WS, sends Slack."""
@@ -168,9 +170,10 @@ async def promote_transport(
 
 
 @router.post("/{transport_id}/rollback")
+@limiter.limit("10/minute")
 async def rollback_transport(
-    transport_id: str,
     request: Request,
+    transport_id: str,
     db: AsyncSession = Depends(get_db)
 ):
     """Rollback transport to previous system. Path param: transport_id. Writes rollback record, broadcasts WS, sends Slack."""

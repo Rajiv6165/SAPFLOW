@@ -110,6 +110,18 @@ cd backend
 alembic upgrade head
 ```
 
+### 4. Makefile Commands
+Shortcut commands for local development using `make`:
+
+| Command | Description |
+|---|---|
+| `make up` | Start local containers in detached mode (`docker-compose up --build -d`) |
+| `make down` | Stop local containers (`docker-compose down`) |
+| `make test` | Run backend pytest suite inside the backend container |
+| `make seed` | Run seed script to populate DB with sample transports and pipeline runs |
+| `make logs` | Tail logs of running containers (`docker-compose logs -f`) |
+
+
 ## 🔌 SAP BTP Integration
 This project works in two modes:
 - **Mock mode** (default): No SAP account needed. Realistic simulated 
