@@ -24,7 +24,16 @@ export interface TransportRecord {
   validation_report?: any;
 }
 
+export interface PaginatedTransports {
+  items: TransportRecord[];
+  page: number;
+  limit: number;
+  total: number;
+  total_pages: number;
+}
+
 export interface SystemHealth {
+
   cpu_percent: number;
   memory_percent: number;
   active_users: number;
@@ -61,16 +70,22 @@ const safeFetch = async <T>(url: string, options?: RequestInit): Promise<T | nul
 };
 
 export const api = {
-  getPipelineRuns: () => safeFetch<any>(\/api/v1/pipeline/status\),
-  getPipelineStatus: () => safeFetch<any>(\/api/v1/pipeline/status\),
-  getPipelineMetrics: () => safeFetch<PipelineMetrics[]>(\/api/v1/pipeline/metrics\),
-  getActiveTransports: () => safeFetch<{ transports: any[] }>(\/api/v1/transport/active\),
-  getTransportHistory: (landscape?: string) => {
-    const url = landscape && landscape !== 'all' ? \/api/v1/transport/history?landscape=\ : \/api/v1/transport/history\;
-    return safeFetch<{ transports: TransportRecord[] }>(url);
+  getPipelineRuns: () => safeFetch<any>(`${BASE_URL}/api/v1/pipeline/status`),
+  getPipelineStatus: () => safeFetch<any>(`${BASE_URL}/api/v1/pipeline/status`),
+  getPipelineMetrics: () => safeFetch<PipelineMetrics[]>(`${BASE_URL}/api/v1/pipeline/metrics`),
+  getActiveTransports: () => safeFetch<{ transports: any[] }>(`${BASE_URL}/api/v1/transport/active`),
+  getTransportHistory: (landscape?: string, page: number = 1, limit: number = 20) => {
+    const params = new URLSearchParams();
+    if (landscape && landscape !== 'all' && landscape.trim() !== '') {
+      params.append('landscape', landscape);
+    }
+    params.append('page', page.toString());
+    params.append('limit', limit.toString());
+    return safeFetch<PaginatedTransports>(`${BASE_URL}/api/v1/transport/history?${params.toString()}`);
   },
-  getLandscapes: () => safeFetch<string[]>(\/api/v1/transport/landscapes\),
-  rollbackTransport: (transportId: string) => safeFetch<any>(\/api/v1/transport/\/rollback\, {
+
+  getLandscapes: () => safeFetch<string[]>(`${BASE_URL}/api/v1/transport/landscapes`),
+  rollbackTransport: (transportId: string) => safeFetch<any>(`${BASE_URL}/api/v1/transport/${transportId}/rollback`, {
     method: 'POST'
   }),
   promoteTransport: (...args: any[]) => {

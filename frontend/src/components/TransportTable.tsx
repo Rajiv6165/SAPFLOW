@@ -26,13 +26,19 @@ export default function TransportTable() {
   const [notification, setNotification] = useState<NotificationType | null>(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState(false);
+  const [page, setPage] = useState(1);
+  const [limit] = useState(20);
+  const [totalPages, setTotalPages] = useState(1);
+  const [totalItems, setTotalItems] = useState(0);
 
-  const loadTransports = async () => {
+  const loadTransports = async (targetPage: number = page) => {
     setLoading(true);
     try {
-      const response = await api.getTransportHistory();
-      if (response && response.transports) {
-        setTransports(response.transports);
+      const response = await api.getTransportHistory(landscapeFilter, targetPage, limit);
+      if (response && response.items) {
+        setTransports(response.items);
+        setTotalPages(response.total_pages || 1);
+        setTotalItems(response.total || 0);
         setError(false);
       } else {
         setError(true);
@@ -56,9 +62,13 @@ export default function TransportTable() {
   };
 
   useEffect(() => {
-    loadTransports();
     loadLandscapes();
   }, []);
+
+  useEffect(() => {
+    loadTransports(page);
+  }, [page, landscapeFilter]);
+
 
   useEffect(() => {
     let result = transports;
@@ -263,7 +273,10 @@ export default function TransportTable() {
             <select
               id="transport-landscape-filter"
               value={landscapeFilter}
-              onChange={(e) => setLandscapeFilter(e.target.value)}
+              onChange={(e) => {
+                setLandscapeFilter(e.target.value);
+                setPage(1);
+              }}
               className="select-dark pl-9"
             >
               <option value="all">All Landscapes</option>
@@ -397,12 +410,43 @@ export default function TransportTable() {
           </table>
         </div>
 
-        {/* Row count */}
-        {filtered.length > 0 && (
-          <p className="text-xs mt-3" style={{ color: '#334155' }}>
-            Showing {filtered.length} of {transports.length} transports
+        {/* Pagination & Row count */}
+        <div className="flex items-center justify-between mt-4 flex-wrap gap-3 pt-3" style={{ borderTop: '1px solid rgba(99,102,241,0.1)' }}>
+          <p className="text-xs font-medium" style={{ color: '#64748b' }}>
+            Showing Page {page} of {totalPages || 1} ({totalItems} total transports)
           </p>
-        )}
+          <div className="flex items-center gap-2">
+            <button
+              id="transport-prev-page"
+              onClick={() => setPage((prev) => Math.max(1, prev - 1))}
+              disabled={page <= 1 || loading}
+              className="px-3 py-1.5 rounded-lg text-xs font-semibold transition-all cursor-pointer disabled:opacity-40 disabled:cursor-not-allowed"
+              style={{
+                background: 'rgba(99,102,241,0.1)',
+                color: '#818cf8',
+                border: '1px solid rgba(99,102,241,0.2)'
+              }}
+            >
+              Previous
+            </button>
+            <span className="text-xs font-mono font-semibold px-2" style={{ color: '#94a3b8' }}>
+              {page} / {totalPages || 1}
+            </span>
+            <button
+              id="transport-next-page"
+              onClick={() => setPage((prev) => Math.min(totalPages, prev + 1))}
+              disabled={page >= totalPages || totalPages === 0 || loading}
+              className="px-3 py-1.5 rounded-lg text-xs font-semibold transition-all cursor-pointer disabled:opacity-40 disabled:cursor-not-allowed"
+              style={{
+                background: 'rgba(99,102,241,0.1)',
+                color: '#818cf8',
+                border: '1px solid rgba(99,102,241,0.2)'
+              }}
+            >
+              Next
+            </button>
+          </div>
+        </div>
       </div>
 
       {/* ─── Promote Modal ──────────────────────────────────────────── */}

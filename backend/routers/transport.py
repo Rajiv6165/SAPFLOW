@@ -1,12 +1,13 @@
 from fastapi import APIRouter, HTTPException, Depends, Request
 from sqlalchemy.ext.asyncio import AsyncSession
-from sqlalchemy import select
+from sqlalchemy import select, func
 from backend.models.database import TransportRecord, engine
 from backend.services.sap_btp import SAPBTPService
 from backend.core.config import settings
 from backend.models.schemas import TransportPromoteRequest
 from backend.core.limiter import limiter
 from datetime import datetime
+import math
 import logging
 from typing import Optional
 
@@ -50,40 +51,61 @@ async def get_landscapes(db: AsyncSession = Depends(get_db)):
 @router.get("/history")
 async def get_transport_history(
     landscape: Optional[str] = None,
+    page: int = 1,
+    limit: int = 20,
     db: AsyncSession = Depends(get_db)
 ):
-    """Get transport history from DB. Query param: landscape. Returns last 50 transports. No side effects."""
+    """Get transport history from DB with pagination. Query params: landscape, page (default 1), limit (default 20, max 100)."""
     try:
+        page = max(1, page)
+        limit = min(100, max(1, limit))
+
         query = select(TransportRecord)
+        count_query = select(func.count(TransportRecord.id))
+
         if landscape and landscape != "all" and landscape.strip() != "":
             query = query.where(TransportRecord.landscape == landscape)
-            
+            count_query = count_query.where(TransportRecord.landscape == landscape)
+
+        total_res = await db.execute(count_query)
+        total = total_res.scalar_one() or 0
+
+        total_pages = math.ceil(total / limit) if total > 0 else 0
+        offset = (page - 1) * limit
+
         result = await db.execute(
-            query.order_by(TransportRecord.promoted_at.desc()).limit(50)
+            query.order_by(TransportRecord.promoted_at.desc()).offset(offset).limit(limit)
         )
         records = result.scalars().all()
-        
+
+        items = [
+            {
+                "id": str(record.id),
+                "transport_id": record.transport_id,
+                "description": record.description,
+                "source_system": record.source_system,
+                "target_system": record.target_system,
+                "status": record.status,
+                "promoted_by": record.promoted_by,
+                "promoted_at": record.promoted_at.isoformat(),
+                "completed_at": record.completed_at.isoformat() if record.completed_at else None,
+                "validation_report": record.validation_report,
+                "landscape": record.landscape
+            }
+            for record in records
+        ]
+
         return {
-            "transports": [
-                {
-                    "id": str(record.id),
-                    "transport_id": record.transport_id,
-                    "description": record.description,
-                    "source_system": record.source_system,
-                    "target_system": record.target_system,
-                    "status": record.status,
-                    "promoted_by": record.promoted_by,
-                    "promoted_at": record.promoted_at.isoformat(),
-                    "completed_at": record.completed_at.isoformat() if record.completed_at else None,
-                    "validation_report": record.validation_report,
-                    "landscape": record.landscape
-                }
-                for record in records
-            ]
+            "items": items,
+            "page": page,
+            "limit": limit,
+            "total": total,
+            "total_pages": total_pages
         }
     except Exception as e:
         logger.error(f"Error fetching transport history: {e}")
         raise HTTPException(status_code=500, detail=str(e))
+
 
 
 @router.post("/promote")
