@@ -22,6 +22,7 @@ export interface TransportRecord {
   promoted_at: string;
   completed_at?: string;
   validation_report?: any;
+  landscape?: string;
 }
 
 export interface PaginatedTransports {
@@ -33,7 +34,6 @@ export interface PaginatedTransports {
 }
 
 export interface SystemHealth {
-
   cpu_percent: number;
   memory_percent: number;
   active_users: number;
@@ -59,12 +59,12 @@ const safeFetch = async <T>(url: string, options?: RequestInit): Promise<T | nul
       },
     });
     if (!response.ok) {
-      console.warn(\Fetch returned status \ for \);
+      console.warn(`Fetch returned status ${response.status} for ${url}`);
       return null;
     }
     return await response.json();
   } catch (error) {
-    console.error(\Fetch error for \:\, error);
+    console.error(`Fetch error for ${url}:`, error);
     return null;
   }
 };
@@ -83,11 +83,9 @@ export const api = {
     params.append('limit', limit.toString());
     return safeFetch<PaginatedTransports>(`${BASE_URL}/api/v1/transport/history?${params.toString()}`);
   },
-
   getLandscapes: () => safeFetch<string[]>(`${BASE_URL}/api/v1/transport/landscapes`),
   getTransportStats: () => safeFetch<any>(`${BASE_URL}/api/v1/transport/stats`),
   rollbackTransport: (transportId: string) => safeFetch<any>(`${BASE_URL}/api/v1/transport/${transportId}/rollback`, {
-
     method: 'POST'
   }),
   promoteTransport: (...args: any[]) => {
@@ -103,33 +101,33 @@ export const api = {
         landscape: args[4] || 'DEFAULT',
       };
     }
-    return safeFetch<any>(\/api/v1/transport/promote\, {
+    return safeFetch<any>(`${BASE_URL}/api/v1/transport/promote`, {
       method: 'POST',
       body: JSON.stringify(bodyData),
     });
   },
-  getSystemHealth: () => safeFetch<SystemHealth>(\/api/v1/health/system\),
-  getSapConnectionStatus: () => fetch(\/api/v1/health/sap-connection\).then(r => r.json()),
-  testSapConnection: () => safeFetch<any>(\/api/v1/health/sap-connection/test\, {
+  getSystemHealth: () => safeFetch<SystemHealth>(`${BASE_URL}/api/v1/health/system`),
+  getSapConnectionStatus: () => fetch(`${BASE_URL}/api/v1/health/sap-connection`).then(r => r.json()),
+  testSapConnection: () => safeFetch<any>(`${BASE_URL}/api/v1/health/sap-connection/test`, {
     method: 'POST'
   }),
   getHealthHistory: (limit?: number) => {
-    const url = limit ? \/api/v1/health/history?limit=\ : \/api/v1/health/history\;
+    const url = limit ? `${BASE_URL}/api/v1/health/history?limit=${limit}` : `${BASE_URL}/api/v1/health/history`;
     return safeFetch<any[]>(url);
   },
-  getTransportDetails: (transportId: string) => safeFetch<TransportRecord>(\/api/v1/transport/\),
-  validateTransport: (transportId: string) => safeFetch<any>(\/api/v1/transport/validate?transport_id=\, {
+  getTransportDetails: (transportId: string) => safeFetch<TransportRecord>(`${BASE_URL}/api/v1/transport/${transportId}`),
+  validateTransport: (transportId: string) => safeFetch<any>(`${BASE_URL}/api/v1/transport/validate?transport_id=${transportId}`, {
     method: 'POST',
   }),
-  getRunJobs: (runId: string) => safeFetch<any>(\/api/v1/pipeline/runs/\/jobs\),
-  syncPipeline: () => safeFetch<any>(\/api/v1/pipeline/sync\, {
+  getRunJobs: (runId: string) => safeFetch<any>(`${BASE_URL}/api/v1/pipeline/runs/${runId}/jobs`),
+  syncPipeline: () => safeFetch<any>(`${BASE_URL}/api/v1/pipeline/sync`, {
     method: 'POST',
   }),
-  triggerPipeline: (branch: string) => safeFetch<any>(\/api/v1/pipeline/trigger\, {
+  triggerPipeline: (branch: string) => safeFetch<any>(`${BASE_URL}/api/v1/pipeline/trigger`, {
     method: 'POST',
     body: JSON.stringify({ branch }),
   }),
-  resetDemoData: () => safeFetch<any>(\/api/v1/demo/reset\, {
+  resetDemoData: () => safeFetch<any>(`${BASE_URL}/api/v1/demo/reset`, {
     method: 'POST'
   }),
 };

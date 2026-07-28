@@ -21,6 +21,16 @@
   --accent-blue:   #3b82f6;
 }
 
+html.light {
+  --bg-primary:    #f8fafc;
+  --bg-secondary:  #f1f5f9;
+  --bg-card:       rgba(255, 255, 255, 0.9);
+  --border-glass:  rgba(99, 102, 241, 0.2);
+  --text-primary:  #0f172a;
+  --text-secondary:#334155;
+  --text-muted:    #64748b;
+}
+
 /* ─── Base Reset ─────────────────────────────────────────────────────── */
 *, *::before, *::after {
   box-sizing: border-box;
@@ -41,7 +51,17 @@ body {
     radial-gradient(ellipse 80% 50% at 50% -20%, rgba(99,102,241,0.12), transparent),
     radial-gradient(ellipse 60% 40% at 80% 80%, rgba(139,92,246,0.08), transparent);
   background-attachment: fixed;
+  transition: background-color 0.3s ease, color 0.3s ease;
 }
+
+html.light body {
+  background-color: #f8fafc;
+  color: #0f172a;
+  background-image:
+    radial-gradient(ellipse 80% 50% at 50% -20%, rgba(99,102,241,0.08), transparent),
+    radial-gradient(ellipse 60% 40% at 80% 80%, rgba(139,92,246,0.05), transparent);
+}
+
 
 /* ─── Scrollbar ──────────────────────────────────────────────────────── */
 ::-webkit-scrollbar { width: 6px; height: 6px; }
@@ -254,6 +274,55 @@ body {
     animation: slideUp 0.25s ease-out;
   }
 }
+
+/* ─── Light Mode Component Overrides ─────────────────────────────────── */
+html.light .glass-card {
+  background: rgba(255, 255, 255, 0.88);
+  border-color: rgba(99, 102, 241, 0.18);
+  box-shadow: 0 4px 20px -4px rgba(0, 0, 0, 0.06), 0 0 0 1px rgba(0,0,0,0.03) inset;
+}
+
+html.light .glass-card:hover {
+  border-color: rgba(99, 102, 241, 0.35);
+  box-shadow: 0 8px 30px -4px rgba(99, 102, 241, 0.15);
+}
+
+html.light .glass-card-sm {
+  background: rgba(241, 245, 249, 0.85);
+  border-color: rgba(148, 163, 184, 0.2);
+}
+
+html.light .input-dark,
+html.light .select-dark {
+  background-color: #ffffff;
+  border-color: rgba(99, 102, 241, 0.25);
+  color: #0f172a;
+}
+
+html.light .card-title {
+  color: #0f172a;
+}
+
+html.light .data-table td {
+  color: #334155;
+  border-bottom: 1px solid rgba(226, 232, 240, 0.8);
+}
+
+html.light .data-table th {
+  color: #475569;
+  border-bottom: 1px solid rgba(99, 102, 241, 0.15);
+}
+
+html.light .data-table tr:hover td {
+  background: rgba(99, 102, 241, 0.06);
+  color: #0f172a;
+}
+
+html.light .modal-panel {
+  background: #ffffff;
+  border-color: rgba(99, 102, 241, 0.2);
+}
+
 
 /* ─── Keyframes ─────────────────────────────────────────────────────── */
 @keyframes fadeIn {

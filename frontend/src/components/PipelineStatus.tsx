@@ -1,6 +1,7 @@
 'use client';
 
-import { usePipelineWebSocket, PipelineData } from '@/lib/websocket';
+import { usePipelineWebSocket, PipelineData, PipelineRun } from '@/lib/websocket';
+
 import { api } from '@/lib/api';
 import { useEffect, useState } from 'react';
 
@@ -45,7 +46,7 @@ export default function PipelineStatus({ wsData }: PipelineStatusProps) {
     setLoadingJobs(true);
     setExpandedJobIndex(null);
     try {
-      const data = await api.getRunJobs(run.run_id);
+      const data = await api.getRunJobs(run.run_id || '');
       if (data) {
         setJobs(data);
       }
@@ -60,9 +61,10 @@ export default function PipelineStatus({ wsData }: PipelineStatusProps) {
     if (!selectedRun) return;
     setIsTriggering(true);
     try {
-      await api.triggerPipeline(selectedRun.branch);
-      alert(`Pipeline re-run triggered for branch ${selectedRun.branch}!`);
+      await api.triggerPipeline(selectedRun.branch || 'main');
+      alert(`Pipeline re-run triggered for branch ${selectedRun.branch || 'main'}!`);
       setShowPanel(false);
+
     } catch (e) {
       console.error(e);
       alert("Failed to trigger re-run");
@@ -308,8 +310,10 @@ export default function PipelineStatus({ wsData }: PipelineStatusProps) {
               <p className="text-sm" style={{ color: '#475569' }}>No pipeline runs yet</p>
             </div>
           ) : (
-            displayData.map((run) => (
+            displayData.map((run: any) => (
               <button
+
+
                 key={run.run_id}
                 onClick={() => handleRunClick(run)}
                 className="w-full text-left"
@@ -411,7 +415,7 @@ export default function PipelineStatus({ wsData }: PipelineStatusProps) {
                 </div>
                 <div className="glass-card-sm p-3 flex-1">
                   <p className="text-[11px] mb-1.5" style={{ color: '#475569' }}>Status</p>
-                  {getStatusBadge(selectedRun.status)}
+                  {getStatusBadge(selectedRun.status || 'pending')}
                 </div>
               </div>
 
@@ -487,7 +491,8 @@ export default function PipelineStatus({ wsData }: PipelineStatusProps) {
               {/* Action Buttons */}
               <div className="flex gap-3 pt-4 border-t border-slate-800/80 mt-4">
                 <a
-                  href={`https://github.com/Rajiv6165/sapflow/actions/runs/${selectedRun.run_id.replace('run-', '')}`}
+                  href={`https://github.com/Rajiv6165/sapflow/actions/runs/${(selectedRun.run_id || '').replace('run-', '')}`}
+
                   target="_blank"
                   rel="noreferrer"
                   className="flex-1 py-2 text-center text-xs font-semibold rounded-lg bg-slate-800 hover:bg-slate-700 text-slate-200 transition-colors border border-slate-700/50"
