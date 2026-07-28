@@ -85,7 +85,9 @@ export const api = {
   },
 
   getLandscapes: () => safeFetch<string[]>(`${BASE_URL}/api/v1/transport/landscapes`),
+  getTransportStats: () => safeFetch<any>(`${BASE_URL}/api/v1/transport/stats`),
   rollbackTransport: (transportId: string) => safeFetch<any>(`${BASE_URL}/api/v1/transport/${transportId}/rollback`, {
+
     method: 'POST'
   }),
   promoteTransport: (...args: any[]) => {

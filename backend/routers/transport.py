@@ -1,6 +1,6 @@
 from fastapi import APIRouter, HTTPException, Depends, Request
 from sqlalchemy.ext.asyncio import AsyncSession
-from sqlalchemy import select, func
+from sqlalchemy import select, func, case, or_
 from backend.models.database import TransportRecord, engine
 from backend.services.sap_btp import SAPBTPService
 from backend.core.config import settings
@@ -33,7 +33,92 @@ async def get_active_transports():
         raise HTTPException(status_code=500, detail=str(e))
 
 
+@router.get("/stats")
+async def get_transport_stats(db: AsyncSession = Depends(get_db)):
+    """Get transport statistics grouped by landscape (FINANCE, LOGISTICS, DEFAULT)."""
+    try:
+        # Aggregate query using SQLAlchemy functions
+        stats_query = select(
+            TransportRecord.landscape,
+            func.count(TransportRecord.id).label("total_transports"),
+            func.sum(case((TransportRecord.status == "success", 1), else_=0)).label("success_count"),
+            func.sum(
+                case(
+                    (
+                        or_(
+                            TransportRecord.transport_id.like("%_ROLLBACK%"),
+                            TransportRecord.promoted_by == "rollback"
+                        ),
+                        1
+                    ),
+                    else_=0
+                )
+            ).label("rollbacks_count")
+        ).group_by(TransportRecord.landscape)
+
+        stats_res = await db.execute(stats_query)
+        stats_rows = stats_res.all()
+
+        # Query completed records for average duration calculation
+        durations_query = select(
+            TransportRecord.landscape,
+            TransportRecord.promoted_at,
+            TransportRecord.completed_at
+        ).where(TransportRecord.completed_at.isnot(None))
+
+        durations_res = await db.execute(durations_query)
+        duration_rows = durations_res.all()
+
+        landscape_durations = {}
+        for row in duration_rows:
+            ls = row.landscape or "DEFAULT"
+            if row.promoted_at and row.completed_at:
+                dur_sec = (row.completed_at - row.promoted_at).total_seconds()
+                if dur_sec >= 0:
+                    landscape_durations.setdefault(ls, []).append(dur_sec)
+
+        known_landscapes = ["DEFAULT", "FINANCE", "LOGISTICS"]
+        landscape_map = {}
+        for ls in known_landscapes:
+            landscape_map[ls] = {
+                "landscape": ls,
+                "total_transports": 0,
+                "success_rate": 0.0,
+                "avg_duration_seconds": 0.0,
+                "rollbacks_count": 0
+            }
+
+        for row in stats_rows:
+            ls = row.landscape or "DEFAULT"
+            total = row.total_transports or 0
+            successes = row.success_count or 0
+            rollbacks = row.rollbacks_count or 0
+
+            dur_list = landscape_durations.get(ls, [])
+            avg_dur = round(sum(dur_list) / len(dur_list), 2) if dur_list else 0.0
+            success_rate = round((successes / total) * 100, 2) if total > 0 else 0.0
+
+            landscape_map[ls] = {
+                "landscape": ls,
+                "total_transports": total,
+                "success_rate": success_rate,
+                "avg_duration_seconds": avg_dur,
+                "rollbacks_count": rollbacks
+            }
+
+        stats_list = list(landscape_map.values())
+
+        return {
+            "stats": stats_list,
+            "by_landscape": landscape_map
+        }
+    except Exception as e:
+        logger.error(f"Error fetching transport stats: {e}")
+        raise HTTPException(status_code=500, detail=str(e))
+
+
 @router.get("/landscapes")
+
 async def get_landscapes(db: AsyncSession = Depends(get_db)):
     """Get available transport landscapes. No params. Returns list of landscape names from DB. No side effects."""
     try:
