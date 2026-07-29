@@ -15,7 +15,6 @@ logger = logging.getLogger(__name__)
 _mock_runs: List[Dict[str, Any]] = []
 
 def _init_mock_runs():
-    global _mock_runs
     if _mock_runs:
         return
     

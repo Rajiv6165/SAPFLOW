@@ -187,13 +187,18 @@ export default function MetricsChart() {
       {/* Chart */}
       <div className="h-64 mb-6">
         {loading ? (
-          <div className="h-full flex items-center justify-center">
-            <div className="flex items-center gap-3">
-              <svg className="w-5 h-5 animate-spin" fill="none" viewBox="0 0 24 24" style={{ color: '#6366f1' }}>
-                <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4" />
-                <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4z" />
-              </svg>
-              <span className="text-sm" style={{ color: '#475569' }}>Loading metrics...</span>
+          <div className="h-full flex flex-col justify-between py-2 animate-pulse">
+            <div className="flex-1 flex items-end justify-between gap-3 px-4 border-b border-slate-800/80 pb-2">
+              {[55, 75, 40, 90, 60, 80, 50, 70, 45, 65, 85, 50].map((h, i) => (
+                <div key={i} className="flex-1 flex flex-col justify-end items-center h-full">
+                  <div className="w-full bg-slate-800/80 rounded-t-md" style={{ height: `${h}%` }} />
+                </div>
+              ))}
+            </div>
+            <div className="flex justify-between px-4 pt-2">
+              {[1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12].map((i) => (
+                <div key={i} className="h-3 w-6 bg-slate-800/60 rounded" />
+              ))}
             </div>
           </div>
         ) : chartData.length === 0 ? (
@@ -247,13 +252,21 @@ export default function MetricsChart() {
       {/* Line Chart */}
       <div className="h-64 mb-10">
         {loading ? (
-          <div className="h-full flex items-center justify-center">
-            <div className="flex items-center gap-3">
-              <svg className="w-5 h-5 animate-spin" fill="none" viewBox="0 0 24 24" style={{ color: '#6366f1' }}>
-                <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4" />
-                <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4z" />
-              </svg>
-              <span className="text-sm" style={{ color: '#475569' }}>Loading trend...</span>
+          <div className="h-full flex flex-col justify-between py-2 animate-pulse">
+            <div className="flex-1 border-b border-slate-800/80 relative flex items-center justify-between px-4">
+              <div className="absolute inset-0 flex flex-col justify-between py-3 opacity-20">
+                <div className="border-b border-slate-800 border-dashed w-full" />
+                <div className="border-b border-slate-800 border-dashed w-full" />
+                <div className="border-b border-slate-800 border-dashed w-full" />
+              </div>
+              {[35, 65, 40, 85, 50, 75, 45, 90, 60, 80].map((h, i) => (
+                <div key={i} className="w-3 h-3 rounded-full bg-slate-800/90 z-10" style={{ transform: `translateY(${(50 - h) * 0.8}px)` }} />
+              ))}
+            </div>
+            <div className="flex justify-between px-4 pt-2">
+              {[1, 2, 3, 4, 5, 6, 7, 8, 9, 10].map((i) => (
+                <div key={i} className="h-3 w-6 bg-slate-800/60 rounded" />
+              ))}
             </div>
           </div>
         ) : trendData.length === 0 ? (

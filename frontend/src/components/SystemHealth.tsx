@@ -174,18 +174,32 @@ export default function SystemHealth() {
   if (loading) {
     return (
       <div className="glass-card p-6 h-full flex flex-col">
-        <div className="mb-5">
-          <p className="section-title mb-1">INFRASTRUCTURE</p>
-          <h3 className="card-title">System Health</h3>
-        </div>
-        <div className="flex-1 flex items-center justify-center">
-          <div className="flex flex-col items-center gap-3">
-            <svg className="w-8 h-8 animate-spin" fill="none" viewBox="0 0 24 24" style={{ color: '#6366f1' }}>
-              <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4" />
-              <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4z" />
-            </svg>
-            <p className="text-sm" style={{ color: '#475569' }}>Loading health metrics...</p>
+        {/* Header Skeleton */}
+        <div className="flex items-center justify-between mb-5">
+          <div>
+            <p className="section-title mb-1">INFRASTRUCTURE</p>
+            <h3 className="card-title">System Health</h3>
           </div>
+          <div className="h-6 w-24 bg-slate-800/80 rounded-lg animate-pulse" />
+        </div>
+
+        {/* SAP BTP Connection Badge Skeleton */}
+        <div className="mb-4">
+          <div className="h-7 w-56 bg-slate-800/60 rounded-full animate-pulse" />
+        </div>
+
+        {/* Metric Grid Skeleton */}
+        <div className="grid grid-cols-2 gap-3 flex-1">
+          {[1, 2, 3, 4].map((i) => (
+            <div key={i} className="p-3.5 rounded-xl bg-slate-900/40 border border-slate-800/60 animate-pulse flex flex-col justify-between">
+              <div className="flex items-center justify-between mb-2">
+                <div className="w-7 h-7 rounded-lg bg-slate-800/80" />
+                <div className="h-3 w-12 bg-slate-800/60 rounded" />
+              </div>
+              <div className="h-7 w-16 bg-slate-800/80 rounded my-1" />
+              <div className="h-8 w-full bg-slate-800/40 rounded mt-2" />
+            </div>
+          ))}
         </div>
       </div>
     );

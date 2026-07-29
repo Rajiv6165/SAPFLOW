@@ -2,6 +2,7 @@ from fastapi import APIRouter, HTTPException, Depends, Request
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy import select, func
 from backend.models.database import PipelineRun, engine
+from backend.models.schemas import PipelineTriggerRequest
 from datetime import datetime, timedelta
 import logging
 

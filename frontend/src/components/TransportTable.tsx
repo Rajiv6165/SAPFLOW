@@ -92,15 +92,59 @@ export default function TransportTable() {
   if (loading) {
     return (
       <div className="glass-card p-6">
+        {/* Header Skeleton */}
         <div className="flex items-center justify-between mb-5 flex-wrap gap-3">
           <div>
             <p className="section-title mb-1">TRANSPORT MANAGER</p>
             <h3 className="card-title">Transport History</h3>
           </div>
+          <div className="flex items-center gap-3">
+            <div className="h-9 w-28 bg-slate-800/80 rounded-xl animate-pulse" />
+            <div className="h-9 w-36 bg-slate-800/80 rounded-xl animate-pulse" />
+          </div>
         </div>
-        <div className="space-y-4">
-          <div className="h-10 bg-slate-800/40 rounded-xl animate-pulse w-full" />
-          <div className="h-32 bg-slate-800/20 rounded-xl animate-pulse w-full" />
+
+        {/* Filters Skeleton */}
+        <div className="flex items-center gap-3 mb-5 flex-wrap">
+          <div className="h-10 flex-1 min-w-48 bg-slate-900/60 border border-slate-800/80 rounded-xl animate-pulse" />
+          <div className="h-10 w-36 bg-slate-900/60 border border-slate-800/80 rounded-xl animate-pulse" />
+          <div className="h-10 w-32 bg-slate-900/60 border border-slate-800/80 rounded-xl animate-pulse" />
+        </div>
+
+        {/* Table Rows Skeleton */}
+        <div className="overflow-x-auto rounded-xl border border-slate-800/80">
+          <div className="p-4 bg-slate-900/40 border-b border-slate-800/80 flex items-center justify-between">
+            <div className="h-4 w-24 bg-slate-800/80 rounded animate-pulse" />
+            <div className="h-4 w-32 bg-slate-800/80 rounded animate-pulse" />
+            <div className="h-4 w-28 bg-slate-800/80 rounded animate-pulse" />
+            <div className="h-4 w-20 bg-slate-800/80 rounded animate-pulse" />
+            <div className="h-4 w-24 bg-slate-800/80 rounded animate-pulse" />
+          </div>
+          <div className="divide-y divide-slate-800/60">
+            {[1, 2, 3, 4, 5].map((i) => (
+              <div key={i} className="p-4 flex items-center justify-between gap-4 animate-pulse bg-slate-900/20">
+                <div className="h-4 w-20 bg-slate-800/80 rounded font-mono" />
+                <div className="flex-1 space-y-1.5 max-w-xs">
+                  <div className="h-4 w-3/4 bg-slate-800/80 rounded" />
+                  <div className="h-3 w-1/2 bg-slate-800/50 rounded" />
+                </div>
+                <div className="h-5 w-24 bg-slate-800/80 rounded-md" />
+                <div className="h-5 w-16 bg-slate-800/80 rounded-full" />
+                <div className="h-4 w-20 bg-slate-800/60 rounded" />
+                <div className="h-4 w-24 bg-slate-800/60 rounded" />
+              </div>
+            ))}
+          </div>
+        </div>
+
+        {/* Pagination Skeleton */}
+        <div className="flex items-center justify-between mt-4 flex-wrap gap-3 pt-3 border-t border-slate-800/80">
+          <div className="h-4 w-48 bg-slate-800/60 rounded animate-pulse" />
+          <div className="flex items-center gap-2">
+            <div className="h-7 w-20 bg-slate-800/80 rounded-lg animate-pulse" />
+            <div className="h-4 w-10 bg-slate-800/60 rounded animate-pulse" />
+            <div className="h-7 w-16 bg-slate-800/80 rounded-lg animate-pulse" />
+          </div>
         </div>
       </div>
     );

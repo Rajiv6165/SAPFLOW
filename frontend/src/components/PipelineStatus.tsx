@@ -144,18 +144,43 @@ export default function PipelineStatus({ wsData }: PipelineStatusProps) {
   if (actualLoading) {
     return (
       <div className="glass-card p-6 h-full flex flex-col">
-        <div className="mb-5">
-          <p className="section-title mb-1">CI/CD PIPELINE</p>
-          <h3 className="card-title">Pipeline Status</h3>
+        {/* Header Skeleton */}
+        <div className="flex items-center justify-between mb-5">
+          <div>
+            <p className="section-title mb-1">CI/CD PIPELINE</p>
+            <h3 className="card-title">Pipeline Status</h3>
+          </div>
+          <div className="flex items-center gap-3">
+            <div className="h-7 w-20 bg-slate-800/80 rounded-lg animate-pulse" />
+            <div className="h-7 w-16 bg-slate-800/80 rounded-lg animate-pulse" />
+          </div>
         </div>
-        <div className="space-y-3 flex-1">
+
+        {/* Search Bar Skeleton */}
+        <div className="mb-4">
+          <div className="h-9 w-full bg-slate-900/60 border border-slate-800 rounded-xl animate-pulse" />
+        </div>
+
+        {/* Items Skeleton */}
+        <div className="space-y-2 flex-1">
           {[1, 2, 3, 4, 5].map((i) => (
-            <div key={i} className="flex items-center gap-3 p-3 rounded-xl bg-slate-900/40 border border-slate-800 animate-pulse">
+            <div
+              key={i}
+              className="flex items-center gap-3 p-3 rounded-xl bg-slate-900/40 border border-slate-800/80 animate-pulse"
+              style={{ borderLeft: '3px solid #334155' }}
+            >
               <div className="flex-1 space-y-2">
-                <div className="h-4 bg-slate-800/80 rounded w-1/3" />
-                <div className="h-3 bg-slate-800/60 rounded w-1/4" />
+                <div className="flex items-center gap-2">
+                  <div className="w-3.5 h-3.5 rounded bg-slate-800/80" />
+                  <div className="h-4 bg-slate-800/80 rounded w-28" />
+                </div>
+                <div className="h-3 bg-slate-800/60 rounded w-16" />
               </div>
-              <div className="h-6 bg-slate-800 rounded w-16" />
+              <div className="text-right space-y-1.5 hidden sm:block">
+                <div className="h-3 bg-slate-800/80 rounded w-12 ml-auto" />
+                <div className="h-3 bg-slate-800/60 rounded w-14 ml-auto" />
+              </div>
+              <div className="h-6 bg-slate-800/90 rounded-full w-20 flex-shrink-0" />
             </div>
           ))}
         </div>
