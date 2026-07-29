@@ -17,6 +17,16 @@ export default function PipelineStatus({ wsData }: PipelineStatusProps) {
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState(false);
   
+  const [searchTerm, setSearchTerm] = useState('');
+  const [debouncedSearchTerm, setDebouncedSearchTerm] = useState('');
+
+  useEffect(() => {
+    const timer = setTimeout(() => {
+      setDebouncedSearchTerm(searchTerm);
+    }, 300);
+    return () => clearTimeout(timer);
+  }, [searchTerm]);
+
   // Phase 3 States
   const [isSyncing, setIsSyncing] = useState(false);
   const [isTriggering, setIsTriggering] = useState(false);
@@ -122,6 +132,14 @@ export default function PipelineStatus({ wsData }: PipelineStatusProps) {
   const actualError = error && !isConnected;
 
   const displayData = wsData ?? (wsPipelineData?.recent_runs ?? httpData);
+
+  const filteredData = displayData.filter((run: PipelineData) => {
+    if (!debouncedSearchTerm.trim()) return true;
+    const term = debouncedSearchTerm.toLowerCase().trim();
+    const branchMatch = run.branch?.toLowerCase().includes(term) ?? false;
+    const commitMatch = run.commit_sha?.toLowerCase().includes(term) ?? false;
+    return branchMatch || commitMatch;
+  });
 
   if (actualLoading) {
     return (
@@ -298,6 +316,35 @@ export default function PipelineStatus({ wsData }: PipelineStatusProps) {
           </div>
         </div>
 
+        {/* Search Input */}
+        <div className="mb-4 relative">
+          <div className="absolute inset-y-0 left-0 pl-3 flex items-center pointer-events-none text-slate-400">
+            <svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M21 21l-6-6m2-5a7 7 0 11-14 0 7 7 0 0114 0z" />
+            </svg>
+          </div>
+          <input
+            id="pipeline-run-search-input"
+            type="text"
+            value={searchTerm}
+            onChange={(e) => setSearchTerm(e.target.value)}
+            placeholder="Search runs by branch or commit SHA..."
+            className="w-full pl-9 pr-8 py-2 rounded-xl text-xs bg-slate-900/60 border border-slate-800 text-slate-200 placeholder-slate-500 focus:outline-none focus:border-indigo-500/60 focus:ring-1 focus:ring-indigo-500/60 transition-all"
+          />
+          {searchTerm && (
+            <button
+              type="button"
+              onClick={() => setSearchTerm('')}
+              className="absolute inset-y-0 right-0 pr-3 flex items-center text-slate-400 hover:text-slate-200 transition-colors"
+              aria-label="Clear search input"
+            >
+              <svg className="w-3.5 h-3.5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" />
+              </svg>
+            </button>
+          )}
+        </div>
+
         {/* Run List */}
         <div className="space-y-2">
           {displayData.length === 0 ? (
@@ -309,8 +356,18 @@ export default function PipelineStatus({ wsData }: PipelineStatusProps) {
               </div>
               <p className="text-sm" style={{ color: '#475569' }}>No pipeline runs yet</p>
             </div>
+          ) : filteredData.length === 0 ? (
+            <div className="flex flex-col items-center justify-center py-12 gap-2 text-center">
+              <div className="w-12 h-12 rounded-full flex items-center justify-center" style={{ background: 'rgba(148,163,184,0.08)' }}>
+                <svg className="w-6 h-6" fill="none" viewBox="0 0 24 24" stroke="#64748b">
+                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1.5} d="M21 21l-6-6m2-5a7 7 0 11-14 0 7 7 0 0114 0z" />
+                </svg>
+              </div>
+              <p className="text-sm font-medium" style={{ color: '#94a3b8' }}>No matching pipeline runs found</p>
+              <p className="text-xs" style={{ color: '#64748b' }}>No runs match &ldquo;{debouncedSearchTerm}&rdquo;</p>
+            </div>
           ) : (
-            displayData.map((run: any) => (
+            filteredData.map((run: any) => (
               <button
 
 
