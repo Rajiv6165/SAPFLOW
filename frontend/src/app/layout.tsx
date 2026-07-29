@@ -3,6 +3,7 @@
 import './globals.css';
 import { ThemeProvider } from '@/context/ThemeContext';
 import ThemeToggle from '@/components/ThemeToggle';
+import ErrorBoundary from '@/components/ErrorBoundary';
 
 export default function RootLayout({ children }: { children: React.ReactNode }) {
   return (
@@ -12,7 +13,8 @@ export default function RootLayout({ children }: { children: React.ReactNode }) 
         <link rel="preconnect" href="https://fonts.gstatic.com" crossOrigin="anonymous" />
       </head>
       <body>
-        <ThemeProvider>
+        <ErrorBoundary>
+          <ThemeProvider>
           {/* Ambient background orbs */}
           <div className="fixed inset-0 -z-10 overflow-hidden pointer-events-none">
             <div
@@ -121,8 +123,9 @@ export default function RootLayout({ children }: { children: React.ReactNode }) 
             </footer>
           </div>
         </ThemeProvider>
-      </body>
-    </html>
+      </ErrorBoundary>
+    </body>
+  </html>
   );
 }
 
