@@ -1,9 +1,27 @@
-'use client';
-
+import type { Metadata } from 'next';
 import './globals.css';
-import { ThemeProvider } from '@/context/ThemeContext';
-import ThemeToggle from '@/components/ThemeToggle';
-import ErrorBoundary from '@/components/ErrorBoundary';
+import Providers from './providers';
+import Navigation from '@/components/Navigation';
+
+export const metadata: Metadata = {
+  title: {
+    default: 'Dashboard | SAPFlow',
+    template: '%s | SAPFlow',
+  },
+  description: 'Enterprise SAP S/4HANA Transport Automation & AWS Integration Platform',
+  icons: {
+    icon: [
+      { url: '/favicon.ico' },
+      { url: '/favicon-16x16.png', sizes: '16x16', type: 'image/png' },
+      { url: '/favicon-32x32.png', sizes: '32x32', type: 'image/png' },
+      { url: '/icon.png', sizes: '512x512', type: 'image/png' },
+    ],
+    apple: [
+      { url: '/apple-touch-icon.png', sizes: '180x180', type: 'image/png' },
+    ],
+  },
+  manifest: '/site.webmanifest',
+};
 
 export default function RootLayout({ children }: { children: React.ReactNode }) {
   return (
@@ -11,10 +29,14 @@ export default function RootLayout({ children }: { children: React.ReactNode }) 
       <head>
         <link rel="preconnect" href="https://fonts.googleapis.com" />
         <link rel="preconnect" href="https://fonts.gstatic.com" crossOrigin="anonymous" />
+        <link rel="icon" href="/favicon.ico" sizes="any" />
+        <link rel="icon" type="image/png" sizes="32x32" href="/favicon-32x32.png" />
+        <link rel="icon" type="image/png" sizes="16x16" href="/favicon-16x16.png" />
+        <link rel="apple-touch-icon" sizes="180x180" href="/apple-touch-icon.png" />
+        <link rel="manifest" href="/site.webmanifest" />
       </head>
       <body>
-        <ErrorBoundary>
-          <ThemeProvider>
+        <Providers>
           {/* Ambient background orbs */}
           <div className="fixed inset-0 -z-10 overflow-hidden pointer-events-none">
             <div
@@ -41,69 +63,7 @@ export default function RootLayout({ children }: { children: React.ReactNode }) 
           </div>
 
           <div className="min-h-screen flex flex-col">
-            {/* ─── Top Navigation Bar ───────────────────────────────────── */}
-            <header className="sticky top-0 z-40 border-b glass-card !rounded-none border-x-0 border-t-0">
-              <div className="max-w-screen-2xl mx-auto px-6 py-4 flex items-center justify-between">
-                {/* Brand */}
-                <div className="flex items-center gap-3">
-                  <div
-                    className="w-8 h-8 rounded-lg flex items-center justify-center text-white font-black text-sm"
-                    style={{
-                      background: 'linear-gradient(135deg, #6366f1, #8b5cf6)',
-                      boxShadow: '0 4px 12px rgba(99,102,241,0.4)',
-                    }}
-                  >
-                    SF
-                  </div>
-                  <div>
-                    <h1 className="text-base font-bold tracking-tight">
-                      SAPFlow
-                    </h1>
-                    <p className="text-xs hidden sm:block text-slate-500 dark:text-slate-400">
-                      S/4HANA Transport Pipeline
-                    </p>
-                  </div>
-                </div>
-
-                {/* Right Side */}
-                <div className="flex items-center gap-4 sm:gap-6">
-                  {/* AWS Badge */}
-                  <div className="hidden md:flex items-center gap-2">
-                    <span className="text-xs font-medium text-slate-500 dark:text-slate-400">
-                      Powered by
-                    </span>
-                    <span
-                      className="px-2 py-0.5 rounded text-xs font-bold"
-                      style={{ background: 'rgba(245,158,11,0.15)', color: '#f59e0b', border: '1px solid rgba(245,158,11,0.2)' }}
-                    >
-                      AWS
-                    </span>
-                    <span
-                      className="px-2 py-0.5 rounded text-xs font-bold"
-                      style={{ background: 'rgba(0,120,212,0.15)', color: '#60a5fa', border: '1px solid rgba(96,165,250,0.2)' }}
-                    >
-                      SAP BTP
-                    </span>
-                  </div>
-
-                  {/* API Docs Link */}
-                  <a
-                    href="http://localhost:8000/docs"
-                    target="_blank"
-                    rel="noopener noreferrer"
-                    className="hidden md:flex items-center gap-1.5 text-xs font-medium text-slate-500 hover:text-indigo-500 transition-colors"
-                  >
-                    <svg className="w-3.5 h-3.5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M10 6H6a2 2 0 00-2 2v10a2 2 0 002 2h10a2 2 0 002-2v-4M14 4h6m0 0v6m0-6L10 14" />
-                    </svg>
-                    API Docs
-                  </a>
-
-                  {/* Theme Toggle Button */}
-                  <ThemeToggle />
-                </div>
-              </div>
-            </header>
+            <Navigation />
 
             {/* ─── Main Content ─────────────────────────────────────────── */}
             <main className="flex-1 max-w-screen-2xl w-full mx-auto px-4 sm:px-6 py-6">
@@ -122,10 +82,8 @@ export default function RootLayout({ children }: { children: React.ReactNode }) 
               </div>
             </footer>
           </div>
-        </ThemeProvider>
-      </ErrorBoundary>
-    </body>
-  </html>
+        </Providers>
+      </body>
+    </html>
   );
 }
-

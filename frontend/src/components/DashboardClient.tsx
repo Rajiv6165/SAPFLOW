@@ -1,0 +1,353 @@
+'use client';
+
+import { usePipelineWebSocket } from '@/lib/websocket';
+import PipelineStatus from '@/components/PipelineStatus';
+import TransportTable from '@/components/TransportTable';
+import SystemHealth from '@/components/SystemHealth';
+import AlertFeed from '@/components/AlertFeed';
+import MetricsChart from '@/components/MetricsChart';
+import { useEffect, useState } from 'react';
+import { api } from '@/lib/api';
+
+interface DashboardStats {
+  totalRunsToday: number;
+  successRate: number;
+  activeTransports: number;
+  systemStatus: 'healthy' | 'degraded' | 'down' | 'unknown';
+}
+
+export default function DashboardClient() {
+  const { data: wsData, isConnected, lastUpdated } = usePipelineWebSocket();
+  const [stats, setStats] = useState<DashboardStats>({
+    totalRunsToday: 0,
+    successRate: 0,
+    activeTransports: 0,
+    systemStatus: 'unknown',
+  });
+
+  const [connectionStatus, setConnectionStatus] = useState<any>(null);
+  const [isResetting, setIsResetting] = useState(false);
+  const [bannerDismissed, setBannerDismissed] = useState(false);
+  const [refreshKey, setRefreshKey] = useState(0);
+
+  useEffect(() => {
+    document.title = 'Dashboard | SAPFlow';
+  }, []);
+
+  const fetchStats = async () => {
+    try {
+      const [pipelineData, transportsData, healthData] = await Promise.allSettled([
+        api.getPipelineStatus(),
+        api.getActiveTransports(),
+        api.getSystemHealth(),
+      ]);
+
+      const today = new Date().toDateString();
+      let runsToday = 0;
+      let successCount = 0;
+
+      if (pipelineData.status === 'fulfilled' && pipelineData.value) {
+        const todaysRuns = (pipelineData.value.last_runs || []).filter(
+          (r: any) => new Date(r.triggered_at).toDateString() === today
+        );
+        runsToday = todaysRuns.length;
+        successCount = todaysRuns.filter((r: any) => r.status === 'success').length;
+      }
+
+      const activeCount =
+        transportsData.status === 'fulfilled' && transportsData.value
+          ? (transportsData.value.transports || []).length
+          : 0;
+
+      const sysStatus =
+        healthData.status === 'fulfilled' && healthData.value ? healthData.value.status : 'unknown';
+
+      setStats({
+        totalRunsToday: runsToday,
+        successRate: runsToday > 0 ? Math.round((successCount / runsToday) * 100) : 0,
+        activeTransports: activeCount,
+        systemStatus: sysStatus as DashboardStats['systemStatus'],
+      });
+    } catch {
+      // stats remain at defaults
+    }
+  };
+
+  const fetchConnection = async () => {
+    try {
+      const conn = await api.getSapConnectionStatus();
+      setConnectionStatus(conn);
+    } catch {
+      // failed
+    }
+  };
+
+  useEffect(() => {
+    fetchStats();
+    fetchConnection();
+    const interval = setInterval(fetchStats, 30000);
+    return () => clearInterval(interval);
+  }, [refreshKey]);
+
+  const handleResetDemo = async () => {
+    setIsResetting(true);
+    try {
+      await api.resetDemoData();
+      setRefreshKey((prev) => prev + 1);
+    } catch {
+      alert('Failed to reset demo data.');
+    } finally {
+      setIsResetting(false);
+    }
+  };
+
+  const totalRuns = wsData ? wsData.summary.total_runs_today : stats.totalRunsToday;
+  const successRate = wsData ? wsData.summary.success_rate : stats.successRate;
+  const activeTransports = wsData ? wsData.summary.active_transports : stats.activeTransports;
+  const systemStatus = wsData ? wsData.summary.system_status : stats.systemStatus;
+  const isLoading = !wsData;
+
+  const systemStatusConfig = {
+    healthy: { label: 'All Systems Operational', color: '#10b981', bg: 'rgba(16,185,129,0.12)', border: 'rgba(16,185,129,0.25)' },
+    degraded: { label: 'Degraded Performance',   color: '#f59e0b', bg: 'rgba(245,158,11,0.12)', border: 'rgba(245,158,11,0.25)' },
+    down:     { label: 'System Down',             color: '#ef4444', bg: 'rgba(239,68,68,0.12)',  border: 'rgba(239,68,68,0.25)'  },
+    unknown:  { label: 'Connecting...',           color: '#94a3b8', bg: 'rgba(148,163,184,0.1)', border: 'rgba(148,163,184,0.15)'},
+  };
+  const currentStatus = isLoading ? 'unknown' : systemStatus;
+  const statusCfg = systemStatusConfig[currentStatus as keyof typeof systemStatusConfig] || systemStatusConfig.unknown;
+
+  const showDemoBanner = connectionStatus && connectionStatus.mode === 'mock' && !connectionStatus.has_credentials && !bannerDismissed;
+
+  return (
+    <div className="space-y-6 animate-fade-in" key={refreshKey}>
+
+      {/* ─── Demo Mode Banner ────────────────────────────────────────── */}
+      {showDemoBanner && (
+        <div
+          className="flex items-center justify-between px-4 py-2.5 rounded-xl text-xs font-semibold transition-all duration-300"
+          style={{
+            background: 'rgba(148,163,184,0.08)',
+            border: '1px solid rgba(148,163,184,0.15)',
+            color: '#94a3b8',
+          }}
+        >
+          <div className="flex items-center gap-2 flex-wrap">
+            <span>⚪ Running in demo mode — SAP BTP mock data active</span>
+            <span className="text-slate-700">|</span>
+            <button
+              onClick={handleResetDemo}
+              disabled={isResetting}
+              className="text-indigo-400 hover:text-indigo-300 cursor-pointer font-bold disabled:opacity-50 flex items-center gap-1 bg-transparent border-none p-0"
+            >
+              {isResetting ? (
+                <>
+                  <svg className="w-3 h-3 animate-spin inline" fill="none" viewBox="0 0 24 24">
+                    <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4" />
+                    <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4z" />
+                  </svg>
+                  Resetting...
+                </>
+              ) : (
+                'Reset Demo Data'
+              )}
+            </button>
+            <span className="text-slate-700">|</span>
+            <a
+              href="https://github.com/Rajiv6165/sapflow#readme"
+              target="_blank"
+              rel="noopener noreferrer"
+              className="text-indigo-400 hover:text-indigo-300 cursor-pointer font-bold"
+            >
+              View Real Setup Guide
+            </a>
+          </div>
+          <button
+            onClick={() => setBannerDismissed(true)}
+            className="w-5 h-5 flex items-center justify-center rounded-full hover:bg-slate-800 text-slate-400 hover:text-slate-200 transition-colors bg-transparent border-none cursor-pointer"
+          >
+            ✕
+          </button>
+        </div>
+      )}
+
+      {/* ─── Live Status Header ──────────────────────────────────────── */}
+      <div className="flex items-center justify-between flex-wrap gap-3">
+        <div>
+          <h2
+            className="text-2xl font-bold tracking-tight"
+            style={{ color: '#f1f5f9', fontFamily: 'Inter, sans-serif' }}
+          >
+            Operations Dashboard
+          </h2>
+          <p className="text-sm mt-0.5" style={{ color: '#64748b' }}>
+            Real-time SAP S/4HANA transport pipeline monitoring
+          </p>
+        </div>
+        <div className="flex items-center gap-3">
+          {/* WS Connection Status */}
+          <div
+            className="flex items-center gap-2 px-3 py-2 rounded-xl text-xs font-semibold"
+            style={{
+              background: isConnected ? 'rgba(16,185,129,0.1)' : 'rgba(148,163,184,0.08)',
+              border: `1px solid ${isConnected ? 'rgba(16,185,129,0.25)' : 'rgba(148,163,184,0.15)'}`,
+              color: isConnected ? '#34d399' : '#94a3b8',
+            }}
+          >
+            <span
+              className="w-2 h-2 rounded-full"
+              style={{
+                background: isConnected ? '#10b981' : '#64748b',
+                boxShadow: isConnected ? '0 0 6px #10b981' : 'none',
+                animation: isConnected ? 'pulse-glow 2s ease-in-out infinite' : 'none',
+              }}
+            />
+            {isConnected ? 'Live' : 'Connecting...'}
+          </div>
+          {/* Last Updated */}
+          {lastUpdated && (
+            <span className="text-xs" style={{ color: '#475569' }}>
+              Updated {lastUpdated.toLocaleTimeString()}
+            </span>
+          )}
+        </div>
+      </div>
+
+      {/* ─── 4-Tile Summary Row ──────────────────────────────────────── */}
+      <div className="grid grid-cols-2 lg:grid-cols-4 gap-4">
+        {/* Total Runs Today */}
+        <div className="stat-tile group">
+          <div className="flex items-start justify-between">
+            <div
+              className="w-10 h-10 rounded-xl flex items-center justify-center"
+              style={{ background: 'rgba(99,102,241,0.15)', border: '1px solid rgba(99,102,241,0.2)' }}
+            >
+              <svg className="w-5 h-5" fill="none" viewBox="0 0 24 24" stroke="#6366f1">
+                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1.5} d="M13 10V3L4 14h7v7l9-11h-7z" />
+              </svg>
+            </div>
+            <span className="text-xs font-medium px-2 py-0.5 rounded-full" style={{ background: 'rgba(99,102,241,0.1)', color: '#818cf8' }}>
+              Today
+            </span>
+          </div>
+          <div className="mt-2">
+            {isLoading ? (
+              <div className="h-8 w-16 bg-slate-800/80 rounded animate-pulse my-1" />
+            ) : (
+              <p className="stat-tile-value" style={{ color: '#6366f1' }}>
+                {totalRuns}
+              </p>
+            )}
+            <p className="stat-tile-label">Total Runs Today</p>
+          </div>
+        </div>
+
+        {/* Success Rate */}
+        <div className="stat-tile group">
+          <div className="flex items-start justify-between">
+            <div
+              className="w-10 h-10 rounded-xl flex items-center justify-center"
+              style={{ background: 'rgba(16,185,129,0.12)', border: '1px solid rgba(16,185,129,0.2)' }}
+            >
+              <svg className="w-5 h-5" fill="none" viewBox="0 0 24 24" stroke="#10b981">
+                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1.5} d="M9 12l2 2 4-4m6 2a9 9 0 11-18 0 9 9 0 0118 0z" />
+              </svg>
+            </div>
+            <span
+              className="text-xs font-medium px-2 py-0.5 rounded-full"
+              style={{
+                background: successRate >= 80 ? 'rgba(16,185,129,0.1)' : 'rgba(239,68,68,0.1)',
+                color: successRate >= 80 ? '#34d399' : '#f87171',
+              }}
+            >
+              {successRate >= 80 ? '▲ Good' : '▼ Low'}
+            </span>
+          </div>
+          <div className="mt-2">
+            {isLoading ? (
+              <div className="h-8 w-16 bg-slate-800/80 rounded animate-pulse my-1" />
+            ) : (
+              <p className="stat-tile-value" style={{ color: successRate >= 80 ? '#10b981' : '#ef4444' }}>
+                {successRate}%
+              </p>
+            )}
+            <p className="stat-tile-label">Success Rate</p>
+          </div>
+        </div>
+
+        {/* Active Transports */}
+        <div className="stat-tile group">
+          <div className="flex items-start justify-between">
+            <div
+              className="w-10 h-10 rounded-xl flex items-center justify-center"
+              style={{ background: 'rgba(59,130,246,0.12)', border: '1px solid rgba(59,130,246,0.2)' }}
+            >
+              <svg className="w-5 h-5" fill="none" viewBox="0 0 24 24" stroke="#3b82f6">
+                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1.5} d="M8 9l3 3-3 3m5 0h3M5 20h14a2 2 0 002-2V6a2 2 0 00-2-2H5a2 2 0 00-2 2v12a2 2 0 002 2z" />
+              </svg>
+            </div>
+            <span className="text-xs font-medium px-2 py-0.5 rounded-full" style={{ background: 'rgba(59,130,246,0.1)', color: '#60a5fa' }}>
+              Open
+            </span>
+          </div>
+          <div className="mt-2">
+            {isLoading ? (
+              <div className="h-8 w-16 bg-slate-800/80 rounded animate-pulse my-1" />
+            ) : (
+              <p className="stat-tile-value" style={{ color: '#3b82f6' }}>
+                {activeTransports}
+              </p>
+            )}
+            <p className="stat-tile-label">Active Transports</p>
+          </div>
+        </div>
+
+        {/* System Status */}
+        <div className="stat-tile group">
+          <div className="flex items-start justify-between">
+            <div
+              className="w-10 h-10 rounded-xl flex items-center justify-center"
+              style={{ background: statusCfg.bg, border: `1px solid ${statusCfg.border}` }}
+            >
+              <svg className="w-5 h-5" fill="none" viewBox="0 0 24 24" stroke={statusCfg.color}>
+                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1.5} d="M9 19v-6a2 2 0 00-2-2H5a2 2 0 00-2 2v6a2 2 0 002 2h2a2 2 0 002-2zm0 0V9a2 2 0 012-2h2a2 2 0 012 2v10m-6 0a2 2 0 002 2h2a2 2 0 002-2m0 0V5a2 2 0 012-2h2a2 2 0 012 2v14a2 2 0 01-2 2h-2a2 2 0 01-2-2z" />
+              </svg>
+            </div>
+            <span
+              className="w-2 h-2 rounded-full mt-1"
+              style={{
+                background: statusCfg.color,
+                boxShadow: `0 0 6px ${statusCfg.color}`,
+                animation: stats.systemStatus === 'healthy' ? 'pulse-glow 2s infinite' : 'none',
+              }}
+            />
+          </div>
+          <div className="mt-2">
+            {isLoading ? (
+              <div className="h-8 w-24 bg-slate-800/80 rounded animate-pulse my-1" />
+            ) : (
+              <p className="stat-tile-value text-xl" style={{ color: statusCfg.color }}>
+                {systemStatus === 'unknown' ? '—' : systemStatus.charAt(0).toUpperCase() + systemStatus.slice(1)}
+              </p>
+            )}
+            <p className="stat-tile-label">{statusCfg.label}</p>
+          </div>
+        </div>
+      </div>
+
+      {/* ─── 2-Column: Pipeline + System Health ─────────────────────── */}
+      <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
+        <PipelineStatus />
+        <SystemHealth />
+      </div>
+
+      {/* ─── Full-Width: Metrics Chart ───────────────────────────────── */}
+      <MetricsChart />
+
+      {/* ─── Full-Width: Transport Table ─────────────────────────────── */}
+      <TransportTable />
+
+      {/* ─── Floating Alert Feed (fixed bottom-right) ────────────────── */}
+      <AlertFeed />
+    </div>
+  );
+}
