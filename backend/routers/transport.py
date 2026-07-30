@@ -208,13 +208,19 @@ async def promote_transport(
         promoted_by = promote_req.promoted_by
         landscape = promote_req.landscape or "DEFAULT"
 
-        result = await sap_service.promote_transport(transport_id, source_system, target_system)
-        
-        # Check if record already exists
+        # Check if record already exists and is already promoted
         existing_record_q = await db.execute(
             select(TransportRecord).where(TransportRecord.transport_id == transport_id)
         )
         existing_record = existing_record_q.scalar_one_or_none()
+        
+        if existing_record and existing_record.status == "success" and existing_record.target_system == target_system:
+            raise HTTPException(
+                status_code=400,
+                detail=f"Transport {transport_id} is already promoted to {target_system}"
+            )
+            
+        result = await sap_service.promote_transport(transport_id, source_system, target_system)
         
         if existing_record:
             existing_record.source_system = source_system
@@ -271,6 +277,8 @@ async def promote_transport(
             "message": result.get("message", "Transport promotion updated/initiated"),
             "landscape": record.landscape
         }
+    except HTTPException:
+        raise
     except Exception as e:
         logger.error(f"Error promoting transport: {e}")
         raise HTTPException(status_code=500, detail=str(e))
