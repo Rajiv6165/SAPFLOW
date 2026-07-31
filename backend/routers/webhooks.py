@@ -25,14 +25,18 @@ router = APIRouter(tags=["webhooks"])
 @router.post("/github")
 async def github_webhook(
     request: Request,
-    x_github_event: str = Header(...),
-    x_hub_signature_256: str = Header(...),
+    x_github_event: Optional[str] = Header(default="workflow_run"),
+    x_hub_signature_256: Optional[str] = Header(default=None),
     db: AsyncSession = Depends(get_db)
 ):
     """Handle GitHub webhooks (workflow_run, push, workflow_job). Headers: event, signature. Writes to DB, broadcasts WS, sends Slack, records CloudWatch metrics."""
     body = await request.body()
     
     # 1. Verify Webhook Signature
+    if not x_hub_signature_256:
+        logger.warning("Missing X-Hub-Signature-256 header")
+        raise HTTPException(status_code=401, detail="Missing signature header")
+
     if not x_hub_signature_256.startswith("sha256="):
         logger.warning("Signature header does not start with sha256=")
         raise HTTPException(status_code=401, detail="Invalid signature format")
