@@ -19,6 +19,7 @@ def test_mock_mode_when_token_is_missing_or_placeholder(monkeypatch):
 
 def test_mock_data_fallback_returns_mock_workflow_runs(monkeypatch):
     """Verify get_workflow_runs returns mock data when no credentials are set."""
+
     async def run():
         monkeypatch.setattr(settings, "GITHUB_TOKEN", "")
         service = GitHubService()
@@ -38,6 +39,7 @@ def test_mock_data_fallback_returns_mock_workflow_runs(monkeypatch):
 
 def test_mock_data_fallback_returns_mock_jobs(monkeypatch):
     """Verify get_run_jobs returns mock job steps when no credentials are set."""
+
     async def run():
         monkeypatch.setattr(settings, "GITHUB_TOKEN", "")
         service = GitHubService()
@@ -54,11 +56,14 @@ def test_mock_data_fallback_returns_mock_jobs(monkeypatch):
 
 def test_mock_data_fallback_trigger_workflow(monkeypatch):
     """Verify trigger_workflow in mock mode appends a new run to mock runs and returns True."""
+
     async def run():
         monkeypatch.setattr(settings, "GITHUB_TOKEN", "")
         service = GitHubService()
 
-        success = await service.trigger_workflow(workflow_id="ci.yml", branch="feature/test-branch")
+        success = await service.trigger_workflow(
+            workflow_id="ci.yml", branch="feature/test-branch"
+        )
         assert success is True
 
         runs = await service.get_workflow_runs(limit=30)
@@ -69,6 +74,7 @@ def test_mock_data_fallback_trigger_workflow(monkeypatch):
 
 def test_real_api_call_when_credentials_present_get_workflow_runs(monkeypatch):
     """Verify GitHubService attempts real HTTP API call when credentials are provided."""
+
     async def run():
         real_token = "ghp_1234567890abcdefghijklmn"
         monkeypatch.setattr(settings, "GITHUB_TOKEN", real_token)
@@ -87,7 +93,7 @@ def test_real_api_call_when_credentials_present_get_workflow_runs(monkeypatch):
                     "head_branch": "main",
                     "head_sha": "abc1234",
                     "created_at": "2026-07-31T12:00:00Z",
-                    "updated_at": "2026-07-31T12:05:00Z"
+                    "updated_at": "2026-07-31T12:05:00Z",
                 }
             ]
         }
@@ -105,7 +111,10 @@ def test_real_api_call_when_credentials_present_get_workflow_runs(monkeypatch):
             # Assert actual HTTP GET call was made
             mock_get.assert_called_once()
             call_args, call_kwargs = mock_get.call_args
-            assert call_args[0] == "https://api.github.com/repos/Rajiv6165/sapflow/actions/runs"
+            assert (
+                call_args[0]
+                == "https://api.github.com/repos/Rajiv6165/sapflow/actions/runs"
+            )
             assert call_kwargs["headers"]["Authorization"] == f"token {real_token}"
             assert call_kwargs["params"] == {"per_page": 10}
 
@@ -120,6 +129,7 @@ def test_real_api_call_when_credentials_present_get_workflow_runs(monkeypatch):
 
 def test_real_api_call_when_credentials_present_get_run_jobs(monkeypatch):
     """Verify GitHubService attempts real HTTP API call for run jobs when credentials are provided."""
+
     async def run():
         real_token = "ghp_1234567890abcdefghijklmn"
         monkeypatch.setattr(settings, "GITHUB_TOKEN", real_token)
@@ -136,8 +146,12 @@ def test_real_api_call_when_credentials_present_get_run_jobs(monkeypatch):
                     "started_at": "2026-07-31T12:00:00Z",
                     "completed_at": "2026-07-31T12:02:00Z",
                     "steps": [
-                        {"name": "Checkout code", "status": "completed", "conclusion": "success"}
-                    ]
+                        {
+                            "name": "Checkout code",
+                            "status": "completed",
+                            "conclusion": "success",
+                        }
+                    ],
                 }
             ]
         }
@@ -154,7 +168,10 @@ def test_real_api_call_when_credentials_present_get_run_jobs(monkeypatch):
 
             mock_get.assert_called_once()
             call_args, call_kwargs = mock_get.call_args
-            assert call_args[0] == "https://api.github.com/repos/Rajiv6165/sapflow/actions/runs/88888/jobs"
+            assert (
+                call_args[0]
+                == "https://api.github.com/repos/Rajiv6165/sapflow/actions/runs/88888/jobs"
+            )
             assert call_kwargs["headers"]["Authorization"] == f"token {real_token}"
 
             assert len(jobs) == 1
@@ -166,6 +183,7 @@ def test_real_api_call_when_credentials_present_get_run_jobs(monkeypatch):
 
 def test_real_api_call_when_credentials_present_trigger_workflow(monkeypatch):
     """Verify GitHubService attempts real HTTP POST call for workflow dispatches when credentials are provided."""
+
     async def run():
         real_token = "ghp_1234567890abcdefghijklmn"
         monkeypatch.setattr(settings, "GITHUB_TOKEN", real_token)
@@ -179,20 +197,31 @@ def test_real_api_call_when_credentials_present_trigger_workflow(monkeypatch):
         with patch("httpx.AsyncClient.post", new_callable=AsyncMock) as mock_post:
             mock_post.return_value = mock_response
 
-            success = await service.trigger_workflow(workflow_id="deploy.yml", branch="main", inputs={"environment": "production"})
+            success = await service.trigger_workflow(
+                workflow_id="deploy.yml",
+                branch="main",
+                inputs={"environment": "production"},
+            )
 
             assert success is True
             mock_post.assert_called_once()
             call_args, call_kwargs = mock_post.call_args
-            assert call_args[0] == "https://api.github.com/repos/Rajiv6165/sapflow/actions/workflows/deploy.yml/dispatches"
+            assert (
+                call_args[0]
+                == "https://api.github.com/repos/Rajiv6165/sapflow/actions/workflows/deploy.yml/dispatches"
+            )
             assert call_kwargs["headers"]["Authorization"] == f"token {real_token}"
-            assert call_kwargs["json"] == {"ref": "main", "inputs": {"environment": "production"}}
+            assert call_kwargs["json"] == {
+                "ref": "main",
+                "inputs": {"environment": "production"},
+            }
 
     asyncio.run(run())
 
 
 def test_real_api_call_failure_falls_back_to_mock_data(monkeypatch):
     """Verify that when real HTTP call fails (e.g. 500 or Exception), it logs error and falls back to mock data."""
+
     async def run():
         real_token = "ghp_1234567890abcdefghijklmn"
         monkeypatch.setattr(settings, "GITHUB_TOKEN", real_token)
@@ -200,7 +229,10 @@ def test_real_api_call_failure_falls_back_to_mock_data(monkeypatch):
 
         service = GitHubService()
 
-        with patch("httpx.AsyncClient.get", side_effect=Exception("API limit exceeded or network down")):
+        with patch(
+            "httpx.AsyncClient.get",
+            side_effect=Exception("API limit exceeded or network down"),
+        ):
             runs = await service.get_workflow_runs(limit=5)
             # Should fall back to mock runs when real API call raises an exception
             assert isinstance(runs, list)

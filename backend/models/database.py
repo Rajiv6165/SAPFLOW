@@ -11,7 +11,7 @@ Base = declarative_base()
 
 class PipelineRun(Base):
     __tablename__ = "pipeline_runs"
-    
+
     id = Column(UUID(as_uuid=True), primary_key=True, default=uuid.uuid4)
     run_id = Column(String, unique=True, nullable=False, index=True)
     branch = Column(String, nullable=False)
@@ -25,7 +25,7 @@ class PipelineRun(Base):
 
 class TransportRecord(Base):
     __tablename__ = "transport_records"
-    
+
     id = Column(UUID(as_uuid=True), primary_key=True, default=uuid.uuid4)
     transport_id = Column(String, unique=True, nullable=False, index=True)
     description = Column(String, nullable=False)
@@ -36,12 +36,14 @@ class TransportRecord(Base):
     promoted_at = Column(DateTime, default=datetime.utcnow, nullable=False)
     completed_at = Column(DateTime, nullable=True)
     validation_report = Column(JSON, nullable=True)
-    landscape = Column(String(50), default="DEFAULT", nullable=False, server_default="DEFAULT")
+    landscape = Column(
+        String(50), default="DEFAULT", nullable=False, server_default="DEFAULT"
+    )
 
 
 class SystemHealthSnapshot(Base):
     __tablename__ = "system_health_snapshots"
-    
+
     id = Column(UUID(as_uuid=True), primary_key=True, default=uuid.uuid4)
     recorded_at = Column(DateTime, default=datetime.utcnow, nullable=False, index=True)
     cpu_percent = Column(Float, nullable=False)
@@ -54,8 +56,7 @@ class SystemHealthSnapshot(Base):
 # Use check_same_thread=False for SQLite (tests only)
 if "sqlite" in settings.DATABASE_URL:
     engine = create_async_engine(
-        settings.DATABASE_URL,
-        connect_args={"check_same_thread": False}
+        settings.DATABASE_URL, connect_args={"check_same_thread": False}
     )
 else:
     engine = create_async_engine(settings.DATABASE_URL)

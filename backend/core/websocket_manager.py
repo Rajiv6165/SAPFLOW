@@ -17,14 +17,20 @@ class ConnectionManager:
         self.active_connections: List[WebSocket] = []
         self.event_log: List[dict] = []  # max 20 events, newest first
 
-    def add_event(self, event_type: str, message: str, branch: str = None, transport_id: str = None):
+    def add_event(
+        self,
+        event_type: str,
+        message: str,
+        branch: str = None,
+        transport_id: str = None,
+    ):
         event = {
             "id": str(uuid4()),
             "type": event_type,  # PUSH / PIPELINE_STARTED / PIPELINE_PASSED / PIPELINE_FAILED / TRANSPORT_PROMOTED
             "message": message,
             "branch": branch,
             "transport_id": transport_id,
-            "timestamp": datetime.utcnow().isoformat()
+            "timestamp": datetime.utcnow().isoformat(),
         }
         self.event_log.insert(0, event)
         self.event_log = self.event_log[:20]  # keep last 20
@@ -32,40 +38,50 @@ class ConnectionManager:
     async def connect(self, websocket: WebSocket):
         await websocket.accept()
         self.active_connections.append(websocket)
-        logger.info(f"WebSocket connected. Total connections: {len(self.active_connections)}")
+        logger.info(
+            f"WebSocket connected. Total connections: {len(self.active_connections)}"
+        )
 
     def disconnect(self, websocket: WebSocket):
         if websocket in self.active_connections:
             self.active_connections.remove(websocket)
-            logger.info(f"WebSocket disconnected. Total connections: {len(self.active_connections)}")
+            logger.info(
+                f"WebSocket disconnected. Total connections: {len(self.active_connections)}"
+            )
 
     async def broadcast(self, message: dict = None):
         if not self.active_connections:
             return
-        
+
         if message is None:
             try:
                 db_url = settings.DATABASE_URL
                 if db_url.startswith("postgresql://"):
                     db_url = db_url.replace("postgresql://", "postgresql+asyncpg://", 1)
-                
+
                 engine = create_async_engine(db_url, echo=False)
                 async with AsyncSession(engine) as session:
                     now = datetime.utcnow()
                     today_start = datetime.combine(now.date(), time.min)
-                    
+
                     # 1. Total runs today
                     today_runs_q = await session.execute(
-                        select(PipelineRun).where(PipelineRun.triggered_at >= today_start)
+                        select(PipelineRun).where(
+                            PipelineRun.triggered_at >= today_start
+                        )
                     )
                     today_runs = today_runs_q.scalars().all()
                     total_runs_today = len(today_runs)
-                    
+
                     # 2. Success rate
                     success_runs = [r for r in today_runs if r.status == "success"]
-                    success_rate = (len(success_runs) / total_runs_today * 100.0) if total_runs_today > 0 else 0.0
+                    success_rate = (
+                        (len(success_runs) / total_runs_today * 100.0)
+                        if total_runs_today > 0
+                        else 0.0
+                    )
                     success_rate = round(success_rate, 1)
-                    
+
                     # 3. Recent runs (last 10)
                     recent_runs_q = await session.execute(
                         select(PipelineRun)
@@ -73,14 +89,15 @@ class ConnectionManager:
                         .limit(10)
                     )
                     recent_runs = recent_runs_q.scalars().all()
-                    
+
                     # 4. Active transports
                     active_transports_q = await session.execute(
-                        select(func.count(TransportRecord.id))
-                        .where(TransportRecord.status.in_(["in_progress", "pending"]))
+                        select(func.count(TransportRecord.id)).where(
+                            TransportRecord.status.in_(["in_progress", "pending"])
+                        )
                     )
                     active_transports = active_transports_q.scalar() or 0
-                    
+
                     # 5. System status
                     latest_health_q = await session.execute(
                         select(SystemHealthSnapshot)
@@ -89,7 +106,7 @@ class ConnectionManager:
                     )
                     latest_health = latest_health_q.scalar_one_or_none()
                     system_status = latest_health.status if latest_health else "unknown"
-                    
+
                     message = {
                         "type": "pipeline_update",
                         "timestamp": now.isoformat(),
@@ -97,7 +114,7 @@ class ConnectionManager:
                             "total_runs_today": total_runs_today,
                             "success_rate": success_rate,
                             "active_transports": active_transports,
-                            "system_status": system_status
+                            "system_status": system_status,
                         },
                         "recent_runs": [
                             {
@@ -107,11 +124,11 @@ class ConnectionManager:
                                 "commit_sha": run.commit_sha,
                                 "status": run.status,
                                 "duration_seconds": run.duration_seconds,
-                                "triggered_at": run.triggered_at.isoformat()
+                                "triggered_at": run.triggered_at.isoformat(),
                             }
                             for run in recent_runs
                         ],
-                        "events": self.event_log
+                        "events": self.event_log,
                     }
                 await engine.dispose()
             except Exception as e:
@@ -128,7 +145,7 @@ class ConnectionManager:
             except Exception as e:
                 logger.error(f"Error broadcasting to WebSocket: {e}")
                 disconnected.append(connection)
-        
+
         for conn in disconnected:
             self.disconnect(conn)
 

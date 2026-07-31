@@ -18,16 +18,16 @@ class SAPBTPService:
         except Exception as e:
             logger.warning(f"Failed to connect to Redis, caching disabled: {e}")
             self.redis_client = None
-            
+
         self.auth_client = None
         if self.settings.has_valid_sap_credentials:
             self.auth_client = SAPAuthClient(
                 self.settings.SAP_BTP_CLIENT_ID,
                 self.settings.SAP_BTP_CLIENT_SECRET,
-                self.settings.SAP_BTP_TOKEN_URL
+                self.settings.SAP_BTP_TOKEN_URL,
             )
         self.is_live = False  # becomes True only after first successful real API call
-        
+
     async def _get_cached_data(self, cache_key: str) -> Optional[Dict]:
         if not self.redis_client:
             return None
@@ -38,7 +38,7 @@ class SAPBTPService:
         except Exception as e:
             logger.warning(f"Failed to read from Redis cache: {e}")
         return None
-    
+
     def _set_cached_data(self, cache_key: str, data: Dict, ttl: int = 30):
         if not self.redis_client:
             return
@@ -52,7 +52,9 @@ class SAPBTPService:
         return {
             "mode": "live" if self.is_live else "mock",
             "has_credentials": self.auth_client is not None,
-            "api_base_url": self.settings.SAP_BTP_API_BASE_URL if self.settings.has_valid_sap_credentials else None
+            "api_base_url": self.settings.SAP_BTP_API_BASE_URL
+            if self.settings.has_valid_sap_credentials
+            else None,
         }
 
     # --- Real Responses Parsers ---
@@ -62,7 +64,7 @@ class SAPBTPService:
             "memory_percent": data.get("memory_percent", data.get("memory", 0.0)),
             "active_users": data.get("active_users", data.get("users", 0)),
             "avg_response_ms": data.get("avg_response_ms", data.get("responseTime", 0)),
-            "status": data.get("status", "healthy")
+            "status": data.get("status", "healthy"),
         }
 
     def _parse_real_active_transports(self, data: List[Dict]) -> List[Dict]:
@@ -81,7 +83,7 @@ class SAPBTPService:
             "memory_percent": 62.8,
             "active_users": 127,
             "avg_response_ms": 245,
-            "status": "healthy"
+            "status": "healthy",
         }
 
     def _mock_active_transports(self) -> List[Dict]:
@@ -91,15 +93,15 @@ class SAPBTPService:
                 "description": "Feature: User authentication enhancement",
                 "owner": "DEVELOPER01",
                 "status": "released",
-                "created_at": "2024-01-15T10:30:00Z"
+                "created_at": "2024-01-15T10:30:00Z",
             },
             {
                 "transport_id": "DEVK900124",
                 "description": "Bugfix: Payment gateway timeout",
                 "owner": "DEVELOPER02",
                 "status": "modifiable",
-                "created_at": "2024-01-16T14:20:00Z"
-            }
+                "created_at": "2024-01-16T14:20:00Z",
+            },
         ]
 
     def _mock_transport_history(self, limit: int = 50) -> List[Dict]:
@@ -110,7 +112,7 @@ class SAPBTPService:
                 "source_system": "DEV",
                 "target_system": "QA",
                 "status": "success",
-                "completed_at": "2024-01-10T16:00:00Z"
+                "completed_at": "2024-01-10T16:00:00Z",
             },
             {
                 "transport_id": "DEVK900099",
@@ -118,7 +120,7 @@ class SAPBTPService:
                 "source_system": "QA",
                 "target_system": "PROD",
                 "status": "success",
-                "completed_at": "2024-01-09T11:30:00Z"
+                "completed_at": "2024-01-09T11:30:00Z",
             },
             {
                 "transport_id": "DEVK900098",
@@ -126,19 +128,21 @@ class SAPBTPService:
                 "source_system": "DEV",
                 "target_system": "QA",
                 "status": "failed",
-                "completed_at": "2024-01-08T09:15:00Z"
-            }
+                "completed_at": "2024-01-08T09:15:00Z",
+            },
         ]
         return data[:limit]
 
-    def _mock_promote_transport(self, transport_id: str, source: str, target: str) -> Dict:
+    def _mock_promote_transport(
+        self, transport_id: str, source: str, target: str
+    ) -> Dict:
         return {
             "transport_id": transport_id,
             "source_system": source,
             "target_system": target,
             "status": "success",
             "message": f"Transport {transport_id} successfully promoted from {source} to {target}",
-            "completed_at": datetime.utcnow().isoformat()
+            "completed_at": datetime.utcnow().isoformat(),
         }
 
     # --- Main Service API Methods ---
@@ -149,9 +153,11 @@ class SAPBTPService:
             return cached
 
         token = await self.auth_client.get_token() if self.auth_client else None
-        
+
         if token is None:
-            logger.info("SAP BTP: using mock mode (no valid credentials or auth failed)")
+            logger.info(
+                "SAP BTP: using mock mode (no valid credentials or auth failed)"
+            )
             data = self._mock_system_health()
         else:
             try:
@@ -159,13 +165,15 @@ class SAPBTPService:
                     response = await client.get(
                         f"{self.settings.SAP_BTP_API_BASE_URL}/monitoring/health",
                         headers={"Authorization": f"Bearer {token}"},
-                        timeout=10.0
+                        timeout=10.0,
                     )
                     response.raise_for_status()
                     self.is_live = True
                     data = self._parse_real_health_response(response.json())
             except Exception as e:
-                logger.warning(f"SAP BTP real API call failed, falling back to mock: {e}")
+                logger.warning(
+                    f"SAP BTP real API call failed, falling back to mock: {e}"
+                )
                 self.is_live = False
                 data = self._mock_system_health()
 
@@ -179,9 +187,11 @@ class SAPBTPService:
             return cached
 
         token = await self.auth_client.get_token() if self.auth_client else None
-        
+
         if token is None:
-            logger.info("SAP BTP: using mock mode (no valid credentials or auth failed)")
+            logger.info(
+                "SAP BTP: using mock mode (no valid credentials or auth failed)"
+            )
             data = self._mock_active_transports()
         else:
             try:
@@ -189,13 +199,15 @@ class SAPBTPService:
                     response = await client.get(
                         f"{self.settings.SAP_BTP_API_BASE_URL}/api/transports/active",
                         headers={"Authorization": f"Bearer {token}"},
-                        timeout=10.0
+                        timeout=10.0,
                     )
                     response.raise_for_status()
                     self.is_live = True
                     data = self._parse_real_active_transports(response.json())
             except Exception as e:
-                logger.warning(f"SAP BTP real API call failed, falling back to mock: {e}")
+                logger.warning(
+                    f"SAP BTP real API call failed, falling back to mock: {e}"
+                )
                 self.is_live = False
                 data = self._mock_active_transports()
 
@@ -209,9 +221,11 @@ class SAPBTPService:
             return cached
 
         token = await self.auth_client.get_token() if self.auth_client else None
-        
+
         if token is None:
-            logger.info("SAP BTP: using mock mode (no valid credentials or auth failed)")
+            logger.info(
+                "SAP BTP: using mock mode (no valid credentials or auth failed)"
+            )
             data = self._mock_transport_history(limit)
         else:
             try:
@@ -219,24 +233,30 @@ class SAPBTPService:
                     response = await client.get(
                         f"{self.settings.SAP_BTP_API_BASE_URL}/api/transports/history?limit={limit}",
                         headers={"Authorization": f"Bearer {token}"},
-                        timeout=10.0
+                        timeout=10.0,
                     )
                     response.raise_for_status()
                     self.is_live = True
                     data = self._parse_real_transport_history(response.json())
             except Exception as e:
-                logger.warning(f"SAP BTP real API call failed, falling back to mock: {e}")
+                logger.warning(
+                    f"SAP BTP real API call failed, falling back to mock: {e}"
+                )
                 self.is_live = False
                 data = self._mock_transport_history(limit)
 
         self._set_cached_data(cache_key, data, 30)
         return data
 
-    async def promote_transport(self, transport_id: str, source: str, target: str) -> Dict:
+    async def promote_transport(
+        self, transport_id: str, source: str, target: str
+    ) -> Dict:
         token = await self.auth_client.get_token() if self.auth_client else None
-        
+
         if token is None:
-            logger.info("SAP BTP: using mock mode (no valid credentials or auth failed)")
+            logger.info(
+                "SAP BTP: using mock mode (no valid credentials or auth failed)"
+            )
             data = self._mock_promote_transport(transport_id, source, target)
         else:
             try:
@@ -246,16 +266,18 @@ class SAPBTPService:
                         json={
                             "transport_id": transport_id,
                             "source_system": source,
-                            "target_system": target
+                            "target_system": target,
                         },
                         headers={"Authorization": f"Bearer {token}"},
-                        timeout=15.0
+                        timeout=15.0,
                     )
                     response.raise_for_status()
                     self.is_live = True
                     data = self._parse_real_promote_transport(response.json())
             except Exception as e:
-                logger.warning(f"SAP BTP real API call failed, falling back to mock: {e}")
+                logger.warning(
+                    f"SAP BTP real API call failed, falling back to mock: {e}"
+                )
                 self.is_live = False
                 data = self._mock_promote_transport(transport_id, source, target)
 
@@ -265,51 +287,53 @@ class SAPBTPService:
                 self.redis_client.delete(cache_key)
             except Exception as e:
                 logger.warning(f"Failed to clear active transports cache: {e}")
-                
+
         return data
 
     async def rollback_transport(self, transport_id: str, system: str) -> Dict:
         """Rollback a transport on the target system."""
         import asyncio
+
         token = await self.auth_client.get_token() if self.auth_client else None
-        
+
         if token is None:
-            logger.info("SAP BTP: using mock mode (no credentials or auth failed) for rollback")
+            logger.info(
+                "SAP BTP: using mock mode (no credentials or auth failed) for rollback"
+            )
             await asyncio.sleep(2)
             return {
                 "status": "rollback_initiated",
                 "transport_id": transport_id,
-                "estimated_duration": "5-10 minutes"
+                "estimated_duration": "5-10 minutes",
             }
         else:
             try:
                 async with httpx.AsyncClient() as client:
                     response = await client.post(
                         f"{self.settings.SAP_BTP_API_BASE_URL}/api/transports/rollback",
-                        json={
-                            "transport_id": transport_id,
-                            "system": system
-                        },
+                        json={"transport_id": transport_id, "system": system},
                         headers={"Authorization": f"Bearer {token}"},
-                        timeout=15.0
+                        timeout=15.0,
                     )
                     response.raise_for_status()
                     self.is_live = True
                     return response.json()
             except Exception as e:
-                logger.warning(f"SAP BTP real API rollback call failed, falling back to mock: {e}")
+                logger.warning(
+                    f"SAP BTP real API rollback call failed, falling back to mock: {e}"
+                )
                 self.is_live = False
                 await asyncio.sleep(2)
                 return {
                     "status": "rollback_initiated",
                     "transport_id": transport_id,
-                    "estimated_duration": "5-10 minutes"
+                    "estimated_duration": "5-10 minutes",
                 }
 
     async def test_connection(self) -> Dict:
         """Actively test connection by getting an OAuth token and making a test API call."""
         tested_at = datetime.utcnow().isoformat()
-        
+
         # 1. Check if settings has valid credentials configured
         if not self.settings.has_valid_sap_credentials:
             return {
@@ -318,19 +342,19 @@ class SAPBTPService:
                 "error": "Missing or placeholder credentials in config",
                 "suggestions": [
                     "Check your CLIENT_ID and CLIENT_SECRET",
-                    "Ensure SAP_BTP_CLIENT_ID and SAP_BTP_CLIENT_SECRET are set in your environment or .env file"
+                    "Ensure SAP_BTP_CLIENT_ID and SAP_BTP_CLIENT_SECRET are set in your environment or .env file",
                 ],
-                "tested_at": tested_at
+                "tested_at": tested_at,
             }
-            
+
         # 2. Try to get token
         token = None
         token_err = None
-        
+
         url = self.settings.SAP_BTP_TOKEN_URL.rstrip("/")
         if not url.endswith("/oauth/token"):
             url = f"{url}/oauth/token"
-            
+
         try:
             async with httpx.AsyncClient() as client:
                 response = await client.post(
@@ -341,7 +365,7 @@ class SAPBTPService:
                         "client_secret": self.settings.SAP_BTP_CLIENT_SECRET,
                     },
                     headers={"Content-Type": "application/x-www-form-urlencoded"},
-                    timeout=10.0
+                    timeout=10.0,
                 )
                 if response.status_code != 200:
                     token_err = f"HTTP {response.status_code}: {response.text}"
@@ -350,7 +374,7 @@ class SAPBTPService:
                     token = data.get("access_token")
         except Exception as e:
             token_err = str(e)
-            
+
         if not token:
             return {
                 "token_obtained": False,
@@ -358,11 +382,11 @@ class SAPBTPService:
                 "error": f"Token request failed: {token_err}",
                 "suggestions": [
                     "Check your CLIENT_ID and CLIENT_SECRET",
-                    "Verify the Token URL format (e.g. https://[subaccount].authentication.[region].hana.ondemand.com)"
+                    "Verify the Token URL format (e.g. https://[subaccount].authentication.[region].hana.ondemand.com)",
                 ],
-                "tested_at": tested_at
+                "tested_at": tested_at,
             }
-            
+
         # 3. Try to make test API call to /monitoring/health
         api_err = None
         try:
@@ -370,23 +394,25 @@ class SAPBTPService:
                 response = await client.get(
                     f"{self.settings.SAP_BTP_API_BASE_URL}/monitoring/health",
                     headers={"Authorization": f"Bearer {token}"},
-                    timeout=10.0
+                    timeout=10.0,
                 )
                 if response.status_code != 200:
                     api_err = f"{response.status_code} {response.reason_phrase} at /monitoring/health"
                     if response.status_code == 404:
-                        api_err += " — your trial subaccount may not have this service enabled"
+                        api_err += (
+                            " — your trial subaccount may not have this service enabled"
+                        )
                 else:
                     self.is_live = True
                     return {
                         "token_obtained": True,
                         "api_reachable": True,
                         "suggestions": [],
-                        "tested_at": tested_at
+                        "tested_at": tested_at,
                     }
         except Exception as e:
             api_err = str(e)
-            
+
         return {
             "token_obtained": True,
             "api_reachable": False,
@@ -394,9 +420,7 @@ class SAPBTPService:
             "suggestions": [
                 "Check that your SAP BTP subaccount has the 'SAP BTP Monitoring' service enabled",
                 "Try the SAP BTP Cockpit to verify your API URL format",
-                "Correct URL format: https://[subaccount-id].cfapps.[region].hana.ondemand.com"
+                "Correct URL format: https://[subaccount-id].cfapps.[region].hana.ondemand.com",
             ],
-            "tested_at": tested_at
+            "tested_at": tested_at,
         }
-
-

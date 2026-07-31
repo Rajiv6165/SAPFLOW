@@ -6,6 +6,7 @@ import re
 
 # ─── Pipeline Schemas ──────────────────────────────────────────────────────────
 
+
 class PipelineRunBase(BaseModel):
     branch: str
     commit_sha: str
@@ -51,6 +52,7 @@ class PipelineTriggerResponse(BaseModel):
 
 # ─── Transport Schemas ─────────────────────────────────────────────────────────
 
+
 class TransportPromoteRequest(BaseModel):
     transport_id: str
     source_system: str  # DEV / QA
@@ -64,7 +66,7 @@ class TransportPromoteRequest(BaseModel):
         if not v or not v.strip():
             raise ValueError("transport_id cannot be empty")
         # SAP transport ID format: e.g., DEVK900123, QAK900456
-        pattern = r'^[A-Z]{3}K\d{6}$'
+        pattern = r"^[A-Z]{3}K\d{6}$"
         if not re.match(pattern, v):
             raise ValueError("transport_id must match SAP format (e.g., DEVK900123)")
         return v
@@ -74,7 +76,9 @@ class TransportPromoteRequest(BaseModel):
     def validate_target_system(cls, v: str) -> str:
         valid_systems = ["DEV", "QA", "PROD"]
         if v not in valid_systems:
-            raise ValueError(f"target_system must be one of: {', '.join(valid_systems)}")
+            raise ValueError(
+                f"target_system must be one of: {', '.join(valid_systems)}"
+            )
         if v == "DEV":
             raise ValueError("Cannot promote to DEV (backwards promotion not allowed)")
         return v
@@ -116,6 +120,7 @@ class TransportValidateResponse(BaseModel):
 
 # ─── Health Schemas ────────────────────────────────────────────────────────────
 
+
 class SystemHealthResponse(BaseModel):
     cpu_percent: float
     memory_percent: float
@@ -131,6 +136,7 @@ class SystemHealthHistoryResponse(BaseModel):
 
 # ─── Alert Schemas ─────────────────────────────────────────────────────────────
 
+
 class AlertResponse(BaseModel):
     alarm_name: str
     state: str
@@ -142,6 +148,7 @@ class CloudWatchAlarmsResponse(BaseModel):
 
 
 # ─── Missing Phase 2 Schemas ───────────────────────────────────────────────────
+
 
 class PipelineMetrics(BaseModel):
     date: str

@@ -22,16 +22,17 @@ aws_alerts = AWSAlertsService()
 
 router = APIRouter(tags=["webhooks"])
 
+
 @router.post("/github")
 async def github_webhook(
     request: Request,
     x_github_event: Optional[str] = Header(default="workflow_run"),
     x_hub_signature_256: Optional[str] = Header(default=None),
-    db: AsyncSession = Depends(get_db)
+    db: AsyncSession = Depends(get_db),
 ):
     """Handle GitHub webhooks (workflow_run, push, workflow_job). Headers: event, signature. Writes to DB, broadcasts WS, sends Slack, records CloudWatch metrics."""
     body = await request.body()
-    
+
     # 1. Verify Webhook Signature
     if not x_hub_signature_256:
         logger.warning("Missing X-Hub-Signature-256 header")
@@ -40,25 +41,25 @@ async def github_webhook(
     if not x_hub_signature_256.startswith("sha256="):
         logger.warning("Signature header does not start with sha256=")
         raise HTTPException(status_code=401, detail="Invalid signature format")
-        
+
     signature = x_hub_signature_256.split("sha256=")[1]
     secret = settings.GITHUB_WEBHOOK_SECRET.encode()
     computed_signature = hmac.new(secret, body, hashlib.sha256).hexdigest()
-    
+
     if not hmac.compare_digest(computed_signature, signature):
         logger.warning("Webhook signature verification failed")
         raise HTTPException(status_code=401, detail="Invalid webhook signature")
-        
+
     # 2. Parse payload
     try:
         payload = json.loads(body.decode())
     except Exception as e:
         logger.error(f"Failed to parse JSON webhook payload: {e}")
         raise HTTPException(status_code=400, detail="Invalid JSON payload")
-        
+
     action = payload.get("action", "")
     logger.info(f"Received GitHub webhook: event={x_github_event}, action={action}")
-    
+
     # 3. Handle Events
     if x_github_event == "workflow_run":
         workflow_run = payload.get("workflow_run", {})
@@ -66,58 +67,62 @@ async def github_webhook(
         branch = workflow_run.get("head_branch")
         commit_sha = workflow_run.get("head_sha")
         conclusion = workflow_run.get("conclusion")
-        
+
         if action == "requested":
             # Start of pipeline
             stmt = select(PipelineRun).where(PipelineRun.run_id == run_id)
             res = await db.execute(stmt)
             run = res.scalar_one_or_none()
-            
+
             if not run:
                 run = PipelineRun(
                     run_id=run_id,
                     branch=branch,
                     commit_sha=commit_sha,
                     status="running",
-                    triggered_at=datetime.utcnow()
+                    triggered_at=datetime.utcnow(),
                 )
                 db.add(run)
             else:
                 run.status = "running"
                 run.triggered_at = datetime.utcnow()
-                
+
             await db.commit()
-            
+
             # Record WS event and broadcast
             manager.add_event(
                 event_type="PIPELINE_STARTED",
                 message=f"Pipeline run #{workflow_run.get('id')} started on branch {branch}",
-                branch=branch
+                branch=branch,
             )
             await manager.broadcast()
             logger.info(f"Pipeline status updated to running for run {run_id}")
-            
+
         elif action == "completed":
             # Completion of pipeline
             stmt = select(PipelineRun).where(PipelineRun.run_id == run_id)
             res = await db.execute(stmt)
             run = res.scalar_one_or_none()
-            
+
             mapped_status = "success" if conclusion == "success" else "failed"
             duration = workflow_run.get("duration")
-            
+
             if duration is None:
                 # Fallback: compute duration from payload timestamps
                 created_at_str = workflow_run.get("created_at")
                 updated_at_str = workflow_run.get("updated_at")
                 if created_at_str and updated_at_str:
                     try:
-                        created_at = datetime.fromisoformat(created_at_str.replace("Z", "+00:00")).replace(tzinfo=None)
-                        updated_at = datetime.fromisoformat(updated_at_str.replace("Z", "+00:00")).replace(tzinfo=None)
+                        created_at = datetime.fromisoformat(
+                            created_at_str.replace("Z", "+00:00")
+                        ).replace(tzinfo=None)
+                        updated_at = datetime.fromisoformat(
+                            updated_at_str.replace("Z", "+00:00")
+                        ).replace(tzinfo=None)
                         duration = int((updated_at - created_at).total_seconds())
                     except Exception as ex:
                         logger.error(f"Error parsing times: {ex}")
-            
+
             if not run:
                 triggered_at = datetime.utcnow()
                 if duration:
@@ -129,7 +134,7 @@ async def github_webhook(
                     status=mapped_status,
                     triggered_at=triggered_at,
                     completed_at=datetime.utcnow(),
-                    duration_seconds=duration
+                    duration_seconds=duration,
                 )
                 db.add(run)
             else:
@@ -138,20 +143,24 @@ async def github_webhook(
                 if duration:
                     run.duration_seconds = duration
                 elif run.triggered_at:
-                    run.duration_seconds = int((datetime.utcnow() - run.triggered_at).total_seconds())
-            
+                    run.duration_seconds = int(
+                        (datetime.utcnow() - run.triggered_at).total_seconds()
+                    )
+
             await db.commit()
 
             # Trigger Slack Notification
             try:
                 # payload can have html_url at top level or within workflow_run
-                run_url = workflow_run.get("html_url", "") or payload.get("html_url", "")
+                run_url = workflow_run.get("html_url", "") or payload.get(
+                    "html_url", ""
+                )
                 await request.app.state.slack.notify_pipeline_result(
                     branch=run.branch,
                     status=run.status,
                     duration=run.duration_seconds or 0,
                     run_url=run_url,
-                    commit=run.commit_sha
+                    commit=run.commit_sha,
                 )
             except Exception as e:
                 logger.error(f"Failed to send Slack pipeline notification: {e}")
@@ -159,45 +168,49 @@ async def github_webhook(
             # Record custom metrics to CloudWatch
             try:
                 await aws_alerts.record_pipeline_result(
-                    status=mapped_status,
-                    branch=branch,
-                    duration=duration or 0
+                    status=mapped_status, branch=branch, duration=duration or 0
                 )
             except Exception as e:
                 logger.error(f"Error publishing CloudWatch pipeline run metric: {e}")
-            
+
             # Record WS event and broadcast
-            event_type = "PIPELINE_PASSED" if mapped_status == "success" else "PIPELINE_FAILED"
+            event_type = (
+                "PIPELINE_PASSED" if mapped_status == "success" else "PIPELINE_FAILED"
+            )
             manager.add_event(
                 event_type=event_type,
                 message=f"Pipeline run #{workflow_run.get('id')} {mapped_status} on branch {branch}",
-                branch=branch
+                branch=branch,
             )
             await manager.broadcast()
             logger.info(f"Pipeline status updated to {mapped_status} for run {run_id}")
-            
+
     elif x_github_event == "push":
         # Handle new commit push event
         ref = payload.get("ref", "")
         branch = ref.replace("refs/heads/", "")
         pusher = payload.get("pusher", {}).get("name", "GitHub")
         commits = payload.get("commits", [])
-        commit_msg = commits[0].get("message", "New commit") if commits else "New commit"
-        
+        commit_msg = (
+            commits[0].get("message", "New commit") if commits else "New commit"
+        )
+
         manager.add_event(
             event_type="PUSH",
             message=f"New commit by {pusher}: {commit_msg}",
-            branch=branch
+            branch=branch,
         )
         await manager.broadcast()
         logger.info(f"Received push event for branch {branch} by {pusher}")
-        
+
     elif x_github_event == "workflow_job":
         # Log individual job updates
         workflow_job = payload.get("workflow_job", {})
         job_name = workflow_job.get("name", "Unknown Job")
         job_status = workflow_job.get("status", "")
         job_conclusion = workflow_job.get("conclusion", "")
-        logger.info(f"Workflow Job Update: '{job_name}' is {job_status} ({job_conclusion or 'running'})")
-        
+        logger.info(
+            f"Workflow Job Update: '{job_name}' is {job_status} ({job_conclusion or 'running'})"
+        )
+
     return {"received": True}

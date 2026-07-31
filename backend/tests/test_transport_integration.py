@@ -12,8 +12,11 @@ from backend.routers.transport import get_db
 
 # ─── Dummy Slack Service Mock ──────────────────────────────────────────────────
 
+
 class DummySlackService:
-    async def notify_transport_promoted(self, transport_id: str, source: str, target: str, promoted_by: str) -> bool:
+    async def notify_transport_promoted(
+        self, transport_id: str, source: str, target: str, promoted_by: str
+    ) -> bool:
         return True
 
     async def notify_transport_rollback(self, transport_id: str, system: str) -> bool:
@@ -22,14 +25,17 @@ class DummySlackService:
 
 # ─── Test Fixture Setup Helper ─────────────────────────────────────────────────
 
+
 async def setup_test_app_and_db():
     """Sets up an in-memory SQLite database and yields a configured AsyncClient."""
     test_db_url = "sqlite+aiosqlite:///:memory:"
-    test_engine = create_async_engine(test_db_url, connect_args={"check_same_thread": False})
-    
+    test_engine = create_async_engine(
+        test_db_url, connect_args={"check_same_thread": False}
+    )
+
     async with test_engine.begin() as conn:
         await conn.run_sync(Base.metadata.create_all)
-        
+
     testing_session_local = sessionmaker(
         test_engine, class_=AsyncSession, expire_on_commit=False
     )
@@ -50,8 +56,10 @@ async def setup_test_app_and_db():
 
 # ─── Integration Tests ─────────────────────────────────────────────────────────
 
+
 def test_successful_promote_dev_to_qa():
     """Test successful promotion of transport from DEV to QA."""
+
     async def run():
         client, session_maker, engine = await setup_test_app_and_db()
         try:
@@ -60,12 +68,12 @@ def test_successful_promote_dev_to_qa():
                 "source_system": "DEV",
                 "target_system": "QA",
                 "promoted_by": "developer1",
-                "landscape": "FINANCE"
+                "landscape": "FINANCE",
             }
-            
+
             response = await client.post("/api/v1/transport/promote", json=payload)
             assert response.status_code == 200
-            
+
             data = response.json()
             assert data["transport_id"] == "DEVK900123"
             assert data["status"] == "success"
@@ -74,7 +82,9 @@ def test_successful_promote_dev_to_qa():
             # Verify record created in DB
             async with session_maker() as session:
                 res = await session.execute(
-                    select(TransportRecord).where(TransportRecord.transport_id == "DEVK900123")
+                    select(TransportRecord).where(
+                        TransportRecord.transport_id == "DEVK900123"
+                    )
                 )
                 record = res.scalar_one_or_none()
                 assert record is not None
@@ -90,6 +100,7 @@ def test_successful_promote_dev_to_qa():
 
 def test_successful_rollback_qa_to_dev():
     """Test successful rollback of a promoted transport from QA back to DEV."""
+
     async def run():
         client, session_maker, engine = await setup_test_app_and_db()
         try:
@@ -99,9 +110,11 @@ def test_successful_rollback_qa_to_dev():
                 "source_system": "DEV",
                 "target_system": "QA",
                 "promoted_by": "developer1",
-                "landscape": "FINANCE"
+                "landscape": "FINANCE",
             }
-            promote_res = await client.post("/api/v1/transport/promote", json=promote_payload)
+            promote_res = await client.post(
+                "/api/v1/transport/promote", json=promote_payload
+            )
             assert promote_res.status_code == 200
 
             # 2. Initiate Rollback
@@ -118,7 +131,9 @@ def test_successful_rollback_qa_to_dev():
             # Verify rollback record in DB
             async with session_maker() as session:
                 res = await session.execute(
-                    select(TransportRecord).where(TransportRecord.transport_id == "DEVK900123_ROLLBACK")
+                    select(TransportRecord).where(
+                        TransportRecord.transport_id == "DEVK900123_ROLLBACK"
+                    )
                 )
                 rollback_record = res.scalar_one_or_none()
                 assert rollback_record is not None
@@ -133,6 +148,7 @@ def test_successful_rollback_qa_to_dev():
 
 def test_promoting_already_promoted_transport_fails():
     """Test that attempting to promote an already-promoted transport fails with HTTP 400."""
+
     async def run():
         client, session_maker, engine = await setup_test_app_and_db()
         try:
@@ -141,9 +157,9 @@ def test_promoting_already_promoted_transport_fails():
                 "source_system": "DEV",
                 "target_system": "QA",
                 "promoted_by": "developer1",
-                "landscape": "DEFAULT"
+                "landscape": "DEFAULT",
             }
-            
+
             # Initial promotion (should succeed)
             res1 = await client.post("/api/v1/transport/promote", json=payload)
             assert res1.status_code == 200
@@ -151,7 +167,7 @@ def test_promoting_already_promoted_transport_fails():
             # Duplicate promotion attempt to same target (should fail)
             res2 = await client.post("/api/v1/transport/promote", json=payload)
             assert res2.status_code == 400
-            
+
             data = res2.json()
             assert "already promoted" in data["detail"]
         finally:
@@ -163,12 +179,13 @@ def test_promoting_already_promoted_transport_fails():
 
 def test_rollback_without_promotion_history_fails():
     """Test that attempting to rollback a transport with no promotion history fails with HTTP 404."""
+
     async def run():
         client, session_maker, engine = await setup_test_app_and_db()
         try:
             response = await client.post("/api/v1/transport/DEVK999999/rollback")
             assert response.status_code == 404
-            
+
             data = response.json()
             assert "Transport not found" in data["detail"]
         finally:
@@ -180,6 +197,7 @@ def test_rollback_without_promotion_history_fails():
 
 def test_rollback_unsuccessful_transport_fails():
     """Test that attempting to rollback a transport that is not in 'success' status fails with HTTP 400."""
+
     async def run():
         client, session_maker, engine = await setup_test_app_and_db()
         try:
@@ -192,14 +210,16 @@ def test_rollback_unsuccessful_transport_fails():
                     target_system="QA",
                     status="failed",
                     promoted_by="developer1",
-                    landscape="DEFAULT"
+                    landscape="DEFAULT",
                 )
                 session.add(failed_record)
                 await session.commit()
 
             response = await client.post("/api/v1/transport/DEVK900789/rollback")
             assert response.status_code == 400
-            assert "Can only rollback successful transports" in response.json()["detail"]
+            assert (
+                "Can only rollback successful transports" in response.json()["detail"]
+            )
         finally:
             await client.aclose()
             await engine.dispose()

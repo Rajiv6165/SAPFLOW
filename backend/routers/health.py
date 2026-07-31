@@ -57,7 +57,7 @@ async def get_system_health():
 async def get_health_history(limit: int = 48):
     """Get health history from DB. Query param: limit (default 48). Returns list of snapshots. No side effects."""
     from sqlalchemy import select
-    
+
     async with AsyncSession(engine) as session:
         try:
             result = await session.execute(
@@ -73,7 +73,7 @@ async def get_health_history(limit: int = 48):
                     "memory_percent": snapshot.memory_percent,
                     "active_users": snapshot.active_users,
                     "avg_response_ms": snapshot.avg_response_ms,
-                    "status": snapshot.status
+                    "status": snapshot.status,
                 }
                 for snapshot in snapshots
             ]

@@ -20,7 +20,7 @@ def test_pagination_envelope_structure():
         "page": page,
         "limit": limit,
         "total": total,
-        "total_pages": total_pages
+        "total_pages": total_pages,
     }
 
     assert envelope["page"] == 1

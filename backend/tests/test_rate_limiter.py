@@ -16,7 +16,9 @@ class MockLimit:
 
 def test_rate_limit_exceeded_handler():
     """Test that RateLimitExceeded handler returns 429 with 'Rate limit exceeded' message."""
-    dummy_request = Request({"type": "http", "method": "GET", "path": "/test", "headers": []})
+    dummy_request = Request(
+        {"type": "http", "method": "GET", "path": "/test", "headers": []}
+    )
     exc = RateLimitExceeded(MockLimit())
 
     response = _rate_limit_exceeded_handler(dummy_request, exc)

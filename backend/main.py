@@ -25,8 +25,7 @@ logger = logging.getLogger(__name__)
 
 def _rate_limit_exceeded_handler(request: Request, exc: RateLimitExceeded):
     response = JSONResponse(
-        status_code=429,
-        content={"detail": f"Rate limit exceeded: {exc.detail}"}
+        status_code=429, content={"detail": f"Rate limit exceeded: {exc.detail}"}
     )
     if hasattr(request.state, "rate_limit"):
         response = request.app.state.limiter._inject_headers(
@@ -40,7 +39,7 @@ app = FastAPI(
     version="1.0.0",
     openapi_url="/api/v1/openapi.json",
     docs_url="/docs",
-    redoc_url="/redoc"
+    redoc_url="/redoc",
 )
 
 app.state.limiter = limiter
@@ -60,10 +59,9 @@ async def log_requests(request, call_next):
     )
     return response
 
+
 if settings.is_production:
-    app.add_middleware(
-        TrustedHostMiddleware, allowed_hosts=settings.ALLOWED_HOSTS
-    )
+    app.add_middleware(TrustedHostMiddleware, allowed_hosts=settings.ALLOWED_HOSTS)
 
 app.add_middleware(
     CORSMiddleware,
@@ -93,15 +91,15 @@ async def startup_event():
         db_url = settings.DATABASE_URL
         if db_url.startswith("postgresql://"):
             db_url = db_url.replace("postgresql://", "postgresql+asyncpg://", 1)
-            
+
         engine = create_async_engine(db_url, echo=False)
         async with engine.begin() as conn:
             await conn.run_sync(Base.metadata.create_all)
         logger.info("Database tables created successfully")
         await engine.dispose()
-    
+
     app.state.github = GitHubService()
-    
+
     asyncio.create_task(poll_system_health())
     asyncio.create_task(broadcast_pipeline_status())
     asyncio.create_task(sync_pipeline_from_github())
@@ -111,11 +109,11 @@ async def poll_system_health():
     while True:
         try:
             health_data = await sap_service.get_system_health()
-            
+
             db_url = settings.DATABASE_URL
             if db_url.startswith("postgresql://"):
                 db_url = db_url.replace("postgresql://", "postgresql+asyncpg://", 1)
-                
+
             engine = create_async_engine(db_url, echo=False)
             async with AsyncSession(engine) as session:
                 snapshot = SystemHealthSnapshot(
@@ -123,7 +121,7 @@ async def poll_system_health():
                     memory_percent=health_data["memory_percent"],
                     active_users=health_data["active_users"],
                     avg_response_ms=health_data["avg_response_ms"],
-                    status=health_data["status"]
+                    status=health_data["status"],
                 )
                 session.add(snapshot)
                 await session.commit()
@@ -131,7 +129,7 @@ async def poll_system_health():
             logger.info("System health snapshot recorded")
         except Exception as e:
             logger.error(f"Error polling system health: {e}")
-        
+
         await asyncio.sleep(60)
 
 
@@ -141,7 +139,7 @@ async def broadcast_pipeline_status():
             await manager.broadcast()
         except Exception as e:
             logger.error(f"Error broadcasting pipeline status: {e}")
-        
+
         await asyncio.sleep(5)
 
 
@@ -151,19 +149,21 @@ async def sync_pipeline_from_github():
             db_url = settings.DATABASE_URL
             if db_url.startswith("postgresql://"):
                 db_url = db_url.replace("postgresql://", "postgresql+asyncpg://", 1)
-                
+
             engine = create_async_engine(db_url, echo=False)
             async with AsyncSession(engine) as session:
                 github_service = getattr(app.state, "github", None)
                 if github_service:
                     synced = await github_service.sync_runs_to_db(session)
                     if synced > 0:
-                        logger.info(f"Synced {synced} pipeline runs from GitHub. Broadcasting update.")
+                        logger.info(
+                            f"Synced {synced} pipeline runs from GitHub. Broadcasting update."
+                        )
                         await manager.broadcast()
             await engine.dispose()
         except Exception as e:
             logger.warning(f"Error syncing pipeline from GitHub: {e}")
-            
+
         await asyncio.sleep(settings.PIPELINE_SYNC_INTERVAL)
 
 

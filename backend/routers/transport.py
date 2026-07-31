@@ -41,19 +41,21 @@ async def get_transport_stats(db: AsyncSession = Depends(get_db)):
         stats_query = select(
             TransportRecord.landscape,
             func.count(TransportRecord.id).label("total_transports"),
-            func.sum(case((TransportRecord.status == "success", 1), else_=0)).label("success_count"),
+            func.sum(case((TransportRecord.status == "success", 1), else_=0)).label(
+                "success_count"
+            ),
             func.sum(
                 case(
                     (
                         or_(
                             TransportRecord.transport_id.like("%_ROLLBACK%"),
-                            TransportRecord.promoted_by == "rollback"
+                            TransportRecord.promoted_by == "rollback",
                         ),
-                        1
+                        1,
                     ),
-                    else_=0
+                    else_=0,
                 )
-            ).label("rollbacks_count")
+            ).label("rollbacks_count"),
         ).group_by(TransportRecord.landscape)
 
         stats_res = await db.execute(stats_query)
@@ -63,7 +65,7 @@ async def get_transport_stats(db: AsyncSession = Depends(get_db)):
         durations_query = select(
             TransportRecord.landscape,
             TransportRecord.promoted_at,
-            TransportRecord.completed_at
+            TransportRecord.completed_at,
         ).where(TransportRecord.completed_at.isnot(None))
 
         durations_res = await db.execute(durations_query)
@@ -85,7 +87,7 @@ async def get_transport_stats(db: AsyncSession = Depends(get_db)):
                 "total_transports": 0,
                 "success_rate": 0.0,
                 "avg_duration_seconds": 0.0,
-                "rollbacks_count": 0
+                "rollbacks_count": 0,
             }
 
         for row in stats_rows:
@@ -103,22 +105,18 @@ async def get_transport_stats(db: AsyncSession = Depends(get_db)):
                 "total_transports": total,
                 "success_rate": success_rate,
                 "avg_duration_seconds": avg_dur,
-                "rollbacks_count": rollbacks
+                "rollbacks_count": rollbacks,
             }
 
         stats_list = list(landscape_map.values())
 
-        return {
-            "stats": stats_list,
-            "by_landscape": landscape_map
-        }
+        return {"stats": stats_list, "by_landscape": landscape_map}
     except Exception as e:
         logger.error(f"Error fetching transport stats: {e}")
         raise HTTPException(status_code=500, detail=str(e))
 
 
 @router.get("/landscapes")
-
 async def get_landscapes(db: AsyncSession = Depends(get_db)):
     """Get available transport landscapes. No params. Returns list of landscape names from DB. No side effects."""
     try:
@@ -138,7 +136,7 @@ async def get_transport_history(
     landscape: Optional[str] = None,
     page: int = 1,
     limit: int = 20,
-    db: AsyncSession = Depends(get_db)
+    db: AsyncSession = Depends(get_db),
 ):
     """Get transport history from DB with pagination. Query params: landscape, page (default 1), limit (default 20, max 100)."""
     try:
@@ -159,7 +157,9 @@ async def get_transport_history(
         offset = (page - 1) * limit
 
         result = await db.execute(
-            query.order_by(TransportRecord.promoted_at.desc()).offset(offset).limit(limit)
+            query.order_by(TransportRecord.promoted_at.desc())
+            .offset(offset)
+            .limit(limit)
         )
         records = result.scalars().all()
 
@@ -173,9 +173,11 @@ async def get_transport_history(
                 "status": record.status,
                 "promoted_by": record.promoted_by,
                 "promoted_at": record.promoted_at.isoformat(),
-                "completed_at": record.completed_at.isoformat() if record.completed_at else None,
+                "completed_at": record.completed_at.isoformat()
+                if record.completed_at
+                else None,
                 "validation_report": record.validation_report,
-                "landscape": record.landscape
+                "landscape": record.landscape,
             }
             for record in records
         ]
@@ -185,12 +187,11 @@ async def get_transport_history(
             "page": page,
             "limit": limit,
             "total": total,
-            "total_pages": total_pages
+            "total_pages": total_pages,
         }
     except Exception as e:
         logger.error(f"Error fetching transport history: {e}")
         raise HTTPException(status_code=500, detail=str(e))
-
 
 
 @router.post("/promote")
@@ -198,7 +199,7 @@ async def get_transport_history(
 async def promote_transport(
     request: Request,
     promote_req: TransportPromoteRequest,
-    db: AsyncSession = Depends(get_db)
+    db: AsyncSession = Depends(get_db),
 ):
     """Promote transport between systems. Body: transport_id, source, target, landscape. Writes to DB, broadcasts WS, sends Slack."""
     try:
@@ -213,15 +214,21 @@ async def promote_transport(
             select(TransportRecord).where(TransportRecord.transport_id == transport_id)
         )
         existing_record = existing_record_q.scalar_one_or_none()
-        
-        if existing_record and existing_record.status == "success" and existing_record.target_system == target_system:
+
+        if (
+            existing_record
+            and existing_record.status == "success"
+            and existing_record.target_system == target_system
+        ):
             raise HTTPException(
                 status_code=400,
-                detail=f"Transport {transport_id} is already promoted to {target_system}"
+                detail=f"Transport {transport_id} is already promoted to {target_system}",
             )
-            
-        result = await sap_service.promote_transport(transport_id, source_system, target_system)
-        
+
+        result = await sap_service.promote_transport(
+            transport_id, source_system, target_system
+        )
+
         if existing_record:
             existing_record.source_system = source_system
             existing_record.target_system = target_system
@@ -232,7 +239,7 @@ async def promote_transport(
             existing_record.landscape = landscape
             await db.commit()
             await db.refresh(existing_record)
-            
+
             record = existing_record
         else:
             record = TransportRecord(
@@ -244,38 +251,41 @@ async def promote_transport(
                 promoted_by=promoted_by,
                 promoted_at=datetime.utcnow(),
                 validation_report=result,
-                landscape=landscape
+                landscape=landscape,
             )
             db.add(record)
             await db.commit()
             await db.refresh(record)
-            
+
         if record.status == "success":
             from backend.core.websocket_manager import manager
+
             manager.add_event(
                 event_type="TRANSPORT_PROMOTED",
                 message=f"Transport {transport_id} promoted to {target_system}",
-                transport_id=transport_id
+                transport_id=transport_id,
             )
             await manager.broadcast()
-            
+
             # Send Slack notification
             try:
                 await request.app.state.slack.notify_transport_promoted(
                     transport_id=transport_id,
                     source=source_system,
                     target=target_system,
-                    promoted_by=promoted_by
+                    promoted_by=promoted_by,
                 )
             except Exception as slack_err:
-                logger.error(f"Error sending Slack notification for promotion: {slack_err}")
-            
+                logger.error(
+                    f"Error sending Slack notification for promotion: {slack_err}"
+                )
+
         return {
             "id": str(record.id),
             "transport_id": record.transport_id,
             "status": record.status,
             "message": result.get("message", "Transport promotion updated/initiated"),
-            "landscape": record.landscape
+            "landscape": record.landscape,
         }
     except HTTPException:
         raise
@@ -287,9 +297,7 @@ async def promote_transport(
 @router.post("/{transport_id}/rollback")
 @limiter.limit("10/minute")
 async def rollback_transport(
-    request: Request,
-    transport_id: str,
-    db: AsyncSession = Depends(get_db)
+    request: Request, transport_id: str, db: AsyncSession = Depends(get_db)
 ):
     """Rollback transport to previous system. Path param: transport_id. Writes rollback record, broadcasts WS, sends Slack."""
     try:
@@ -298,29 +306,31 @@ async def rollback_transport(
             select(TransportRecord).where(TransportRecord.transport_id == transport_id)
         )
         record = result.scalar_one_or_none()
-        
+
         if not record:
             raise HTTPException(status_code=404, detail="Transport not found")
-            
+
         if record.status != "success":
-            raise HTTPException(status_code=400, detail="Can only rollback successful transports")
-            
+            raise HTTPException(
+                status_code=400, detail="Can only rollback successful transports"
+            )
+
         current_target = record.target_system
         current_source = record.source_system
         landscape = record.landscape
-        
+
         # Execute SAP BTP rollback
         await sap_service.rollback_transport(transport_id, current_target)
-        
+
         # New rollback record ID
         rollback_id = f"{transport_id}_ROLLBACK"
-        
+
         # Check if rollback record already exists
         existing_q = await db.execute(
             select(TransportRecord).where(TransportRecord.transport_id == rollback_id)
         )
         existing_record = existing_q.scalar_one_or_none()
-        
+
         if existing_record:
             new_record = existing_record
             new_record.source_system = current_target
@@ -341,31 +351,33 @@ async def rollback_transport(
                 promoted_at=datetime.utcnow(),
                 completed_at=None,
                 landscape=landscape,
-                validation_report={"rollback_status": "initiated"}
+                validation_report={"rollback_status": "initiated"},
             )
             db.add(new_record)
-            
+
         await db.commit()
         await db.refresh(new_record)
-        
+
         # WebSocket broadcast
         from backend.core.websocket_manager import manager
+
         manager.add_event(
             event_type="TRANSPORT_ROLLBACK",
             message=f"Rollback initiated for {transport_id} from {current_target} to {current_source}",
-            transport_id=rollback_id
+            transport_id=rollback_id,
         )
         await manager.broadcast()
-        
+
         # Slack notification
         try:
             await request.app.state.slack.notify_transport_rollback(
-                transport_id=transport_id,
-                system=current_target
+                transport_id=transport_id, system=current_target
             )
         except Exception as slack_err:
-            logger.error(f"Error sending Slack notification for transport rollback: {slack_err}")
-            
+            logger.error(
+                f"Error sending Slack notification for transport rollback: {slack_err}"
+            )
+
         return {
             "id": str(new_record.id),
             "transport_id": new_record.transport_id,
@@ -375,7 +387,7 @@ async def rollback_transport(
             "target_system": new_record.target_system,
             "promoted_by": new_record.promoted_by,
             "promoted_at": new_record.promoted_at.isoformat(),
-            "landscape": new_record.landscape
+            "landscape": new_record.landscape,
         }
     except HTTPException:
         raise
@@ -392,10 +404,10 @@ async def get_transport_details(transport_id: str, db: AsyncSession = Depends(ge
             select(TransportRecord).where(TransportRecord.transport_id == transport_id)
         )
         record = result.scalar_one_or_none()
-        
+
         if not record:
             raise HTTPException(status_code=404, detail="Transport not found")
-        
+
         return {
             "id": str(record.id),
             "transport_id": record.transport_id,
@@ -405,9 +417,11 @@ async def get_transport_details(transport_id: str, db: AsyncSession = Depends(ge
             "status": record.status,
             "promoted_by": record.promoted_by,
             "promoted_at": record.promoted_at.isoformat(),
-            "completed_at": record.completed_at.isoformat() if record.completed_at else None,
+            "completed_at": record.completed_at.isoformat()
+            if record.completed_at
+            else None,
             "validation_report": record.validation_report,
-            "landscape": record.landscape
+            "landscape": record.landscape,
         }
     except HTTPException:
         raise
@@ -422,24 +436,24 @@ async def validate_transport(transport_id: str):
     try:
         from transport_runner.abap_inspector import ABAPInspector
         from transport_runner.transport_validator import TransportValidator
-        
+
         inspector = ABAPInspector(
             sap_host=settings.SAP_BTP_HOST,
             client_id=settings.SAP_CLIENT_ID,
-            client_secret=settings.SAP_CLIENT_SECRET
+            client_secret=settings.SAP_CLIENT_SECRET,
         )
-        
+
         inspection_result = await inspector.run_code_inspection(transport_id)
         objects = await inspector.validate_transport_objects(transport_id)
-        
+
         validator = TransportValidator(objects)
         validation_result = validator.generate_report()
-        
+
         return {
             "transport_id": transport_id,
             "inspection": inspection_result,
             "validation": validation_result,
-            "overall_valid": validation_result.get("is_valid", False)
+            "overall_valid": validation_result.get("is_valid", False),
         }
     except Exception as e:
         logger.error(f"Error validating transport: {e}")
