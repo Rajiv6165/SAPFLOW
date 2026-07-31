@@ -69,24 +69,27 @@ class GitHubService:
     def _is_mock_mode(self) -> bool:
         return not self.token or "token" in self.token.lower() or self.token == ""
 
+    def _get_mock_workflow_runs(self, limit: int = 20) -> List[Dict[str, Any]]:
+        # Sort mock runs by created_at descending
+        sorted_runs = sorted(_mock_runs, key=lambda x: x["created_at"], reverse=True)
+        result = []
+        for run in sorted_runs[:limit]:
+            result.append({
+                "id": run["id"],
+                "name": run["name"],
+                "status": self._map_status(run["status"], run["conclusion"]),
+                "conclusion": run["conclusion"],
+                "branch": run["head_branch"],
+                "head_sha": run["head_sha"],
+                "created_at": run["created_at"],
+                "updated_at": run["updated_at"]
+            })
+        return result
+
     async def get_workflow_runs(self, limit: int = 20) -> List[Dict[str, Any]]:
         if self._is_mock_mode():
             logger.info("GitHub API in mock mode. Returning mock workflow runs.")
-            # Sort mock runs by created_at descending
-            sorted_runs = sorted(_mock_runs, key=lambda x: x["created_at"], reverse=True)
-            result = []
-            for run in sorted_runs[:limit]:
-                result.append({
-                    "id": run["id"],
-                    "name": run["name"],
-                    "status": self._map_status(run["status"], run["conclusion"]),
-                    "conclusion": run["conclusion"],
-                    "branch": run["head_branch"],
-                    "head_sha": run["head_sha"],
-                    "created_at": run["created_at"],
-                    "updated_at": run["updated_at"]
-                })
-            return result
+            return self._get_mock_workflow_runs(limit)
 
         owner, repo = self.repo.split("/")
         url = f"https://api.github.com/repos/{owner}/{repo}/actions/runs"
@@ -118,7 +121,7 @@ class GitHubService:
             except Exception as e:
                 logger.error(f"Error fetching workflow runs from GitHub API: {e}")
                 # Fallback to mock on error
-                return await self.get_workflow_runs(limit)
+                return self._get_mock_workflow_runs(limit)
 
     async def get_run_jobs(self, run_id: Any) -> List[Dict[str, Any]]:
         # Normalize run_id
