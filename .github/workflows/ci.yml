@@ -175,7 +175,7 @@ jobs:
           
           SIGNATURE=$(echo -n "$PAYLOAD" | openssl dgst -sha256 -hmac "${{ secrets.GITHUB_WEBHOOK_SECRET }}" | cut -d' ' -f2)
           
-          curl -X POST ${{ secrets.SAPFLOW_WEBHOOK_URL }}/webhooks/github \
+          curl -X POST ${{ secrets.SAPFLOW_WEBHOOK_URL }}/api/v1/webhooks/github \
             -H "Content-Type: application/json" \
             -H "X-Hub-Signature-256: sha256=$SIGNATURE" \
             -H "X-GitHub-Event: workflow_run" \
