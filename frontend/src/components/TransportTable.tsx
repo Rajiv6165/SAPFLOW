@@ -5,9 +5,25 @@ import { api, TransportRecord } from '@/lib/api';
 
 type NotificationType = { type: 'success' | 'error'; message: string };
 
-export default function TransportTable() {
-  const [transports, setTransports] = useState<TransportRecord[]>([]);
-  const [filtered, setFiltered] = useState<TransportRecord[]>([]);
+export interface TransportTableProps {
+  initialTransports?: TransportRecord[];
+  onPromote?: (
+    transport_id: string,
+    source_system?: string,
+    target_system?: string,
+    promoted_by?: string,
+    landscape?: string
+  ) => Promise<any> | void;
+  onRollback?: (transport_id: string) => Promise<any> | void;
+}
+
+export default function TransportTable({
+  initialTransports,
+  onPromote,
+  onRollback,
+}: TransportTableProps = {}) {
+  const [transports, setTransports] = useState<TransportRecord[]>(initialTransports || []);
+  const [filtered, setFiltered] = useState<TransportRecord[]>(initialTransports || []);
   const [searchTerm, setSearchTerm] = useState('');
   const [statusFilter, setStatusFilter] = useState('all');
   const [landscapeFilter, setLandscapeFilter] = useState('all');
@@ -24,14 +40,18 @@ export default function TransportTable() {
     landscape: 'DEFAULT',
   });
   const [notification, setNotification] = useState<NotificationType | null>(null);
-  const [loading, setLoading] = useState(true);
+  const [loading, setLoading] = useState(initialTransports ? false : true);
   const [error, setError] = useState(false);
   const [page, setPage] = useState(1);
   const [limit] = useState(20);
-  const [totalPages, setTotalPages] = useState(1);
-  const [totalItems, setTotalItems] = useState(0);
+  const [totalPages, setTotalPages] = useState(initialTransports ? 1 : 1);
+  const [totalItems, setTotalItems] = useState(initialTransports ? initialTransports.length : 0);
 
   const loadTransports = async (targetPage: number = page) => {
+    if (initialTransports) {
+      setLoading(false);
+      return;
+    }
     setLoading(true);
     try {
       const response = await api.getTransportHistory(landscapeFilter, targetPage, limit);
@@ -66,8 +86,15 @@ export default function TransportTable() {
   }, []);
 
   useEffect(() => {
-    loadTransports(page);
-  }, [page, landscapeFilter]);
+    if (initialTransports) {
+      setTransports(initialTransports);
+      setTotalItems(initialTransports.length);
+      setLoading(false);
+      setError(false);
+    } else {
+      loadTransports(page);
+    }
+  }, [page, landscapeFilter, initialTransports]);
 
 
   useEffect(() => {
@@ -177,10 +204,30 @@ export default function TransportTable() {
     setTimeout(() => setNotification(null), 4000);
   };
 
+  const handlePromoteRowClick = (t: TransportRecord) => {
+    setFormData({
+      transport_id: t.transport_id,
+      source_system: t.source_system || 'DEV',
+      target_system: t.target_system || 'QA',
+      promoted_by: t.promoted_by || '',
+      landscape: t.landscape || 'DEFAULT',
+    });
+    setShowModal(true);
+  };
+
   const handlePromote = async () => {
     if (!formData.transport_id.trim()) return;
     setIsSubmitting(true);
     try {
+      if (onPromote) {
+        await onPromote(
+          formData.transport_id,
+          formData.source_system,
+          formData.target_system,
+          formData.promoted_by || 'manual',
+          formData.landscape || 'DEFAULT'
+        );
+      }
       await api.promoteTransport(
         formData.transport_id,
         formData.source_system,
@@ -217,6 +264,9 @@ export default function TransportTable() {
     );
     
     try {
+      if (onRollback) {
+        await onRollback(tid);
+      }
       await api.rollbackTransport(tid);
       showToast('success', `Rollback initiated for ${tid}`);
       await loadTransports();
@@ -503,25 +553,45 @@ export default function TransportTable() {
                       </span>
                     </td>
                     <td>
-                      {t.status === 'success' && (
-                        <button
-                          onClick={() => handleRollbackClick(t)}
-                          className="px-2 py-1 rounded text-xs font-bold transition-all flex items-center gap-1 cursor-pointer"
-                          style={{
-                            border: '1px solid rgba(239,68,68,0.4)',
-                            color: '#f87171',
-                            background: 'transparent',
-                          }}
-                          onMouseEnter={(e) => {
-                            e.currentTarget.style.background = 'rgba(239,68,68,0.1)';
-                          }}
-                          onMouseLeave={(e) => {
-                            e.currentTarget.style.background = 'transparent';
-                          }}
-                        >
-                          <span>↩</span> Rollback
-                        </button>
-                      )}
+                      <div className="flex items-center gap-2">
+                        {t.status === 'success' ? (
+                          <button
+                            onClick={() => handleRollbackClick(t)}
+                            className="px-2 py-1 rounded text-xs font-bold transition-all flex items-center gap-1 cursor-pointer"
+                            style={{
+                              border: '1px solid rgba(239,68,68,0.4)',
+                              color: '#f87171',
+                              background: 'transparent',
+                            }}
+                            onMouseEnter={(e) => {
+                              e.currentTarget.style.background = 'rgba(239,68,68,0.1)';
+                            }}
+                            onMouseLeave={(e) => {
+                              e.currentTarget.style.background = 'transparent';
+                            }}
+                          >
+                            <span>↩</span> Rollback
+                          </button>
+                        ) : (
+                          <button
+                            onClick={() => handlePromoteRowClick(t)}
+                            className="px-2 py-1 rounded text-xs font-bold transition-all flex items-center gap-1 cursor-pointer"
+                            style={{
+                              border: '1px solid rgba(99,102,241,0.4)',
+                              color: '#818cf8',
+                              background: 'transparent',
+                            }}
+                            onMouseEnter={(e) => {
+                              e.currentTarget.style.background = 'rgba(99,102,241,0.1)';
+                            }}
+                            onMouseLeave={(e) => {
+                              e.currentTarget.style.background = 'transparent';
+                            }}
+                          >
+                            <span>🚀</span> Promote
+                          </button>
+                        )}
+                      </div>
                     </td>
                   </tr>
                 ))
