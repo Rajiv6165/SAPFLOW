@@ -11,6 +11,7 @@ from backend.services.slack_service import SlackService
 def test_slack_service_disabled_when_webhook_url_empty_or_placeholder():
     """Verify SlackService disabled state for empty, None, or placeholder webhook URLs."""
     urls_disabled = [
+        None,
         "",
         "   ",
         "https://hooks.slack.com/services/placeholder",
@@ -28,35 +29,54 @@ def test_slack_service_enabled_when_valid_webhook_url_configured():
     assert service.enabled is True
 
 
-def test_slack_service_silently_noops_when_disabled():
-    """Verify SlackService methods return True and perform no network calls when disabled."""
+def test_slack_service_silently_noops_when_no_webhook_url_configured():
+    """Verify SlackService methods return True, do not raise exceptions, and perform no network calls when no webhook URL is configured."""
 
     async def run():
-        service = SlackService("https://hooks.slack.com/services/placeholder")
-        assert service.enabled is False
+        unconfigured_urls = [
+            None,
+            "",
+            "   ",
+            "https://hooks.slack.com/services/placeholder",
+        ]
+        for url in unconfigured_urls:
+            service = SlackService(url)
+            assert service.enabled is False
 
-        with patch("httpx.AsyncClient.post", new_callable=AsyncMock) as mock_post:
-            res_send = await service.send({"text": "test"})
-            res_pipeline = await service.notify_pipeline_result(
-                "main", "success", 100, "http://url", "commitsha"
-            )
-            res_promoted = await service.notify_transport_promoted(
-                "T101", "DEV", "QA", "user1"
-            )
-            res_rollback = await service.notify_transport_rollback("T101", "QA")
-            res_alert = await service.notify_system_alert(
-                "DiskFull", "Disk > 95%", "critical"
-            )
+            with patch("httpx.AsyncClient.post", new_callable=AsyncMock) as mock_post:
+                res_send = await service.send({"text": "test message"})
+                res_pipeline = await service.notify_pipeline_result(
+                    branch="main",
+                    status="success",
+                    duration=100,
+                    run_url="https://github.com/run",
+                    commit="commitsha",
+                )
+                res_promoted = await service.notify_transport_promoted(
+                    transport_id="T101",
+                    source="DEV",
+                    target="QA",
+                    promoted_by="user1",
+                )
+                res_rollback = await service.notify_transport_rollback(
+                    transport_id="T101",
+                    system="QA",
+                )
+                res_alert = await service.notify_system_alert(
+                    alert_type="DiskFull",
+                    message_text="Disk > 95%",
+                    severity="critical",
+                )
 
-            # All calls should return True without raising exceptions
-            assert res_send is True
-            assert res_pipeline is True
-            assert res_promoted is True
-            assert res_rollback is True
-            assert res_alert is True
+                # All calls should return True silently without raising exceptions
+                assert res_send is True
+                assert res_pipeline is True
+                assert res_promoted is True
+                assert res_rollback is True
+                assert res_alert is True
 
-            # Confirm no HTTP POST call was ever attempted
-            mock_post.assert_not_called()
+                # Confirm no HTTP POST call was ever attempted
+                mock_post.assert_not_called()
 
     asyncio.run(run())
 
