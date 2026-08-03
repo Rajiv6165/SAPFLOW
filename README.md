@@ -121,6 +121,17 @@ Shortcut commands for local development using `make`:
 | `make seed` | Run seed script to populate DB with sample transports and pipeline runs |
 | `make logs` | Tail logs of running containers (`docker-compose logs -f`) |
 
+### 5. Development Setup
+
+To maintain consistent formatting and code quality across Python and TypeScript files, install and configure pre-commit hooks:
+
+```bash
+pip install pre-commit
+pre-commit install
+```
+
+This automatically runs `black` and `flake8` on backend Python code and `prettier` on frontend TypeScript/TSX files prior to git commits.
+
 
 ## 🔌 SAP BTP Integration
 This project works in two modes:
