@@ -107,6 +107,11 @@ services:
     networks:
       - sapflow-network
     command: npm run dev
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:3000/"]
+      interval: 30s
+      timeout: 3s
+      retries: 3
 
   transport-runner:
     build:
