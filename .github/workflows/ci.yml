@@ -173,7 +173,7 @@ jobs:
           EOF
           )
           
-          SIGNATURE=$(echo -n "$PAYLOAD" | openssl dgst -sha256 -hmac "${{ secrets.GITHUB_WEBHOOK_SECRET }}" | cut -d' ' -f2)
+          SIGNATURE=$(echo -n "$PAYLOAD" | openssl dgst -sha256 -hmac "${{ secrets.WEBHOOK_SECRET }}" | cut -d' ' -f2)
           
           curl -X POST ${{ secrets.SAPFLOW_WEBHOOK_URL }}/api/v1/webhooks/github \
             -H "Content-Type: application/json" \
