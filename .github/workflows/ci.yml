@@ -1,18 +1,17 @@
-# Required GitHub Secrets:
-# SAPFLOW_WEBHOOK_URL  — URL where SAPFlow backend is deployed (e.g. https://your-ngrok-url.ngrok.io)
-# GITHUB_WEBHOOK_SECRET — must match GITHUB_WEBHOOK_SECRET in backend .env
-# AWS_ACCESS_KEY_ID    — for ECR push (Phase 4)
-# AWS_SECRET_ACCESS_KEY — for ECR push (Phase 4)
-# ECR_REGISTRY         — AWS ECR registry URL (Phase 4)
-# SLACK_WEBHOOK_URL    — for Slack notifications (Phase 4)
-
 name: SAPFlow CI Pipeline
+
+# Required GitHub Secrets:
+# WEBHOOK_SECRET        — must match GITHUB_WEBHOOK_SECRET in backend .env
+# SAPFLOW_WEBHOOK_URL   — URL where SAPFlow backend is deployed
+# AWS_ACCESS_KEY_ID     — for ECR push (Phase 4)
+# AWS_SECRET_ACCESS_KEY — for ECR push (Phase 4)
+# ECR_REGISTRY          — AWS ECR registry URL (Phase 4)
+# SLACK_WEBHOOK_URL     — for Slack notifications
 
 on:
   push:
     branches:
       - '**'
-      - '!main'
   pull_request:
     branches:
       - '**'
@@ -39,42 +38,39 @@ jobs:
 
       - name: Checkout code
         uses: actions/checkout@v4
-      
+
       - name: Set up Python
         uses: actions/setup-python@v4
         with:
           python-version: '3.11'
-      
+
       - name: Install dependencies
         working-directory: backend
         run: |
           pip install flake8 black pytest pytest-cov
           pip install -r requirements.txt
-      
+
       - name: Run flake8
         run: |
           flake8 backend/ --count --select=E9,F63,F7,F82 --show-source --statistics
           flake8 backend/ --count --exit-zero --max-complexity=10 --max-line-length=127 --statistics
-      
+
       - name: Run black check
-        run: |
-          black backend/
-          git diff --exit-code
-      
+        working-directory: backend
+        run: black --check .
+
       - name: Run pytest with coverage
         working-directory: backend
         env:
           SAP_MOCK_MODE: "true"
           DATABASE_URL: "sqlite+aiosqlite:///./test.db"
           REDIS_URL: "redis://localhost:6379"
-        run: |
-          pytest tests/ -v --tb=short
-      
-      - name: Upload coverage
-        uses: actions/upload-artifact@v3
-        with:
-          name: coverage-report
-          path: backend/coverage.xml
+          GITHUB_TOKEN: ""
+          GITHUB_REPO: "Rajiv6165/SAPFLOW"
+          WEBHOOK_SECRET: "test-secret"
+          SLACK_WEBHOOK_URL: ""
+          ENVIRONMENT: "development"
+        run: pytest tests/ -v --tb=short
 
   abap-validation:
     runs-on: ubuntu-latest
@@ -82,56 +78,34 @@ jobs:
     steps:
       - name: Checkout code
         uses: actions/checkout@v4
-      
+
       - name: Set up Python
         uses: actions/setup-python@v4
         with:
           python-version: '3.11'
-      
+
       - name: Install dependencies
-        run: |
-          pip install requests
-      
-      - name: Run ABAP Inspector
+        run: pip install requests httpx
+
+      - name: Run ABAP Inspector (mock mode)
         env:
-          SAP_BTP_HOST: ${{ secrets.SAP_BTP_HOST }}
-          SAP_CLIENT_ID: ${{ secrets.SAP_CLIENT_ID }}
-          SAP_CLIENT_SECRET: ${{ secrets.SAP_CLIENT_SECRET }}
-          SAP_TOKEN_URL: ${{ secrets.SAP_TOKEN_URL }}
-          SAP_MOCK_MODE: true
+          SAP_MOCK_MODE: "true"
         run: |
-          python transport-runner/test_runner.py --transport-id DEVK900001 --source-system DEV --mock
-      
-      - name: Post GitHub status
-        if: always()
-        uses: actions/github-script@v6
-        with:
-          script: |
-            github.rest.repos.createCommitStatus({
-              owner: context.repo.owner,
-              repo: context.repo.repo,
-              sha: context.sha,
-              state: '${{ job.status }}',
-              context: 'ABAP Validation',
-              description: 'ABAP code inspection completed'
-            })
+          python transport-runner/test_runner.py \
+            --transport-id DEVK900001 \
+            --source-system DEV \
+            --mock
 
   notify:
     needs: [test]
     runs-on: ubuntu-latest
     if: always()
     steps:
-      - name: Notify result
-        if: ${{ secrets.SLACK_WEBHOOK_URL != '' }}
-        env:
-          SLACK_WEBHOOK_URL: ${{ secrets.SLACK_WEBHOOK_URL }}
+      - name: Pipeline notification
         run: |
-          curl -X POST $SLACK_WEBHOOK_URL \
-            -H "Content-Type: application/json" \
-            -d '{"text": "SAPFlow CI: ${{ needs.test.result }}"}'
-      - name: Skip notification
-        if: ${{ secrets.SLACK_WEBHOOK_URL == '' }}
-        run: echo "Slack webhook not configured, skipping notification"
+          echo "CI Pipeline completed with status: ${{ needs.test.result }}"
+          echo "Branch: ${{ github.ref_name }}"
+          echo "Commit: ${{ github.sha }}"
 
   report-to-sapflow:
     needs: [test, abap-validation]
@@ -143,41 +117,44 @@ jobs:
           START_TIME="${{ needs.test.outputs.start_time }}"
           END_TIME=$(date -u +%s)
           DURATION=$((END_TIME - START_TIME))
-          
-          # Determine the overall pipeline conclusion
+
           CONCLUSION="success"
           if [ "${{ needs.test.result }}" = "failure" ] || \
              [ "${{ needs.abap-validation.result }}" = "failure" ]; then
             CONCLUSION="failure"
-          elif [ "${{ needs.test.result }}" = "cancelled" ] || \
-               [ "${{ needs.abap-validation.result }}" = "cancelled" ]; then
-            CONCLUSION="cancelled"
-          elif [ "${{ needs.test.result }}" = "skipped" ] && \
-               [ "${{ needs.abap-validation.result }}" = "skipped" ]; then
-            CONCLUSION="skipped"
           fi
-          
-          PAYLOAD=$(cat <<EOF
-          {
+
+          echo "Pipeline conclusion: $CONCLUSION"
+          echo "Duration: ${DURATION}s"
+
+          WEBHOOK_URL="${{ secrets.SAPFLOW_WEBHOOK_URL }}"
+          if [ -z "$WEBHOOK_URL" ] || [ "$WEBHOOK_URL" = "placeholder" ]; then
+            echo "SAPFLOW_WEBHOOK_URL not configured, skipping webhook call"
+            exit 0
+          fi
+
+          PAYLOAD=$(printf '%s' '{
             "action": "completed",
             "workflow_run": {
               "id": ${{ github.run_id }},
               "name": "${{ github.workflow }}",
               "status": "completed",
-              "conclusion": "$CONCLUSION",
+              "conclusion": "'"$CONCLUSION"'",
               "head_branch": "${{ github.ref_name }}",
               "head_sha": "${{ github.sha }}",
               "html_url": "${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}",
-              "duration": $DURATION
+              "duration": '"$DURATION"'
             }
-          }
-          EOF
-          )
-          
-          SIGNATURE=$(echo -n "$PAYLOAD" | openssl dgst -sha256 -hmac "${{ secrets.WEBHOOK_SECRET }}" | cut -d' ' -f2)
-          
-          curl -X POST ${{ secrets.SAPFLOW_WEBHOOK_URL }}/api/v1/webhooks/github \
-            -H "Content-Type: application/json" \
-            -H "X-Hub-Signature-256: sha256=$SIGNATURE" \
-            -H "X-GitHub-Event: workflow_run" \
-            -d "$PAYLOAD"
+          }')
+
+          WEBHOOK_SECRET="${{ secrets.WEBHOOK_SECRET }}"
+          if [ -n "$WEBHOOK_SECRET" ] && [ "$WEBHOOK_SECRET" != "placeholder" ]; then
+            SIGNATURE=$(echo -n "$PAYLOAD" | openssl dgst -sha256 -hmac "$WEBHOOK_SECRET" | cut -d' ' -f2)
+            curl -X POST "$WEBHOOK_URL/api/v1/webhooks/github" \
+              -H "Content-Type: application/json" \
+              -H "X-Hub-Signature-256: sha256=$SIGNATURE" \
+              -H "X-GitHub-Event: workflow_run" \
+              -d "$PAYLOAD"
+          else
+            echo "WEBHOOK_SECRET not configured, skipping signed webhook"
+          fi
