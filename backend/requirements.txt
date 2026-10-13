@@ -11,7 +11,6 @@ python-multipart==0.0.6
 alembic==1.13.1
 pytest==7.4.3
 pytest-asyncio==0.23.5
-aiosqlite==0.19.0
+aiosqlite
 slowapi==0.1.9
-anyio==4.2.0
 
