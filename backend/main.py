@@ -79,10 +79,12 @@ app.include_router(demo.router, prefix="/api/v1")
 
 sap_service = SAPBTPService()
 aws_service = AWSAlertsService()
+app.state.sap_btp = sap_service
 
 
 @app.on_event("startup")
 async def startup_event():
+    app.state.sap_btp = sap_service
     app.state.slack = SlackService(settings.SLACK_WEBHOOK_URL)
     if settings.is_production and settings.SAP_MOCK_MODE:
         logger.warning("⚠️ SAP MOCK MODE is ENABLED in production environment!")

@@ -121,16 +121,13 @@ jobs:
     if: always()
     steps:
       - name: Notify result
-        if: ${{ env.SLACK_WEBHOOK_URL != '' }}
+        if: ${{ vars.SLACK_WEBHOOK_URL != '' || secrets.SLACK_WEBHOOK_URL != '' }}
         env:
           SLACK_WEBHOOK_URL: ${{ secrets.SLACK_WEBHOOK_URL }}
         run: |
           curl -X POST $SLACK_WEBHOOK_URL \
             -H "Content-Type: application/json" \
             -d '{"text": "SAPFlow CI: ${{ needs.test.result }}"}'
-      - name: Skip notification
-        if: ${{ env.SLACK_WEBHOOK_URL == '' }}
-        run: echo "Slack webhook not configured, skipping notification"
 
   report-to-sapflow:
     needs: [test, abap-validation]

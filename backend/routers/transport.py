@@ -173,9 +173,9 @@ async def get_transport_history(
                 "status": record.status,
                 "promoted_by": record.promoted_by,
                 "promoted_at": record.promoted_at.isoformat(),
-                "completed_at": record.completed_at.isoformat()
-                if record.completed_at
-                else None,
+                "completed_at": (
+                    record.completed_at.isoformat() if record.completed_at else None
+                ),
                 "validation_report": record.validation_report,
                 "landscape": record.landscape,
             }
@@ -417,9 +417,9 @@ async def get_transport_details(transport_id: str, db: AsyncSession = Depends(ge
             "status": record.status,
             "promoted_by": record.promoted_by,
             "promoted_at": record.promoted_at.isoformat(),
-            "completed_at": record.completed_at.isoformat()
-            if record.completed_at
-            else None,
+            "completed_at": (
+                record.completed_at.isoformat() if record.completed_at else None
+            ),
             "validation_report": record.validation_report,
             "landscape": record.landscape,
         }
@@ -431,23 +431,17 @@ async def get_transport_details(transport_id: str, db: AsyncSession = Depends(ge
 
 
 @router.post("/validate")
-async def validate_transport(transport_id: str):
+async def validate_transport(request: Request, transport_id: str):
     """Validate transport via ABAP inspection. Query param: transport_id. Returns inspection and validation report. No side effects."""
     try:
-        from transport_runner.abap_inspector import ABAPInspector
-        from transport_runner.transport_validator import TransportValidator
+        sap_btp: SAPBTPService = (
+            getattr(request.app.state, "sap_btp", None)
+            if request and hasattr(request, "app")
+            else sap_service
+        ) or sap_service
 
-        inspector = ABAPInspector(
-            sap_host=settings.SAP_BTP_HOST,
-            client_id=settings.SAP_CLIENT_ID,
-            client_secret=settings.SAP_CLIENT_SECRET,
-        )
-
-        inspection_result = await inspector.run_code_inspection(transport_id)
-        objects = await inspector.validate_transport_objects(transport_id)
-
-        validator = TransportValidator(objects)
-        validation_result = validator.generate_report()
+        inspection_result = await sap_btp.run_code_inspection(transport_id)
+        validation_result = await sap_btp.validate_transport(transport_id)
 
         return {
             "transport_id": transport_id,

@@ -2,7 +2,6 @@ import pytest
 from pydantic import ValidationError
 from backend.models.schemas import TransportPromoteRequest
 
-
 # ─── Pytest Fixtures for Reusable Sample Payloads ─────────────────────────────
 
 

@@ -101,9 +101,11 @@ Timestamp: {self._get_timestamp()}
                 Namespace="SAPFlow",
                 MetricData=[
                     {
-                        "MetricName": "PipelineFailures"
-                        if status == "failed"
-                        else "PipelineSuccesses",
+                        "MetricName": (
+                            "PipelineFailures"
+                            if status == "failed"
+                            else "PipelineSuccesses"
+                        ),
                         "Value": 1,
                         "Unit": "Count",
                         "Dimensions": [

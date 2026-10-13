@@ -9,7 +9,6 @@ from backend.main import app
 from backend.models.database import Base, TransportRecord
 from backend.routers.transport import get_db
 
-
 # ─── Dummy Slack Service Mock ──────────────────────────────────────────────────
 
 
@@ -220,6 +219,26 @@ def test_rollback_unsuccessful_transport_fails():
             assert (
                 "Can only rollback successful transports" in response.json()["detail"]
             )
+        finally:
+            await client.aclose()
+            await engine.dispose()
+
+    asyncio.run(run())
+
+
+def test_validate_transport_endpoint():
+    """Test validating a transport via ABAP inspection endpoint."""
+
+    async def run():
+        client, _, engine = await setup_test_app_and_db()
+        try:
+            response = await client.post("/api/v1/transport/validate?transport_id=DEVK900123")
+            assert response.status_code == 200
+            data = response.json()
+            assert data["transport_id"] == "DEVK900123"
+            assert "inspection" in data
+            assert "validation" in data
+            assert data["overall_valid"] is True
         finally:
             await client.aclose()
             await engine.dispose()

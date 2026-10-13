@@ -52,9 +52,11 @@ class SAPBTPService:
         return {
             "mode": "live" if self.is_live else "mock",
             "has_credentials": self.auth_client is not None,
-            "api_base_url": self.settings.SAP_BTP_API_BASE_URL
-            if self.settings.has_valid_sap_credentials
-            else None,
+            "api_base_url": (
+                self.settings.SAP_BTP_API_BASE_URL
+                if self.settings.has_valid_sap_credentials
+                else None
+            ),
         }
 
     # --- Real Responses Parsers ---
@@ -143,6 +145,70 @@ class SAPBTPService:
             "status": "success",
             "message": f"Transport {transport_id} successfully promoted from {source} to {target}",
             "completed_at": datetime.utcnow().isoformat(),
+        }
+
+    def _mock_inspection_result(self, transport_id: str) -> Dict:
+        return {
+            "transport_id": transport_id,
+            "severity": "INFO",
+            "findings": [
+                {
+                    "object": "ZCL_USER_AUTH",
+                    "type": "Class",
+                    "message": "Code follows naming conventions",
+                    "line": 1,
+                },
+                {
+                    "object": "ZFM_PAYMENT_PROCESS",
+                    "type": "Function Module",
+                    "message": "Consider adding error handling for timeout scenarios",
+                    "line": 45,
+                },
+            ],
+            "passed": True,
+        }
+
+    def _mock_transport_objects(self, transport_id: str) -> List[Dict]:
+        return [
+            {
+                "object_name": "ZCL_USER_AUTH",
+                "object_type": "CLAS",
+                "description": "User authentication class",
+                "package": "Z_AUTH",
+            },
+            {
+                "object_name": "ZFM_PAYMENT_PROCESS",
+                "object_type": "FUGR",
+                "description": "Payment processing function group",
+                "package": "Z_PAYMENT",
+            },
+            {
+                "object_name": "ZT_USER_DATA",
+                "object_type": "TABL",
+                "description": "User data table",
+                "package": "Z_AUTH",
+            },
+        ]
+
+    def _parse_real_inspection_result(self, data: Dict) -> Dict:
+        findings = []
+        raw_findings = data.get("findings", [])
+        for f in raw_findings:
+            findings.append(
+                {
+                    "object": f.get("object", f.get("objectName", "UNKNOWN")),
+                    "type": f.get("type", f.get("objectType", "UNKNOWN")),
+                    "message": f.get("message", f.get("findingMessage", "")),
+                    "line": f.get("line", f.get("lineNumber", 1)),
+                }
+            )
+        if not findings and "findings" in data:
+            findings = raw_findings
+        return {
+            "transport_id": data.get("transportId", data.get("transport_id", "")),
+            "severity": data.get("severity", "INFO"),
+            "findings": findings,
+            "passed": data.get("passed", True),
         }
 
     # --- Main Service API Methods ---
@@ -423,4 +489,120 @@ class SAPBTPService:
                 "Correct URL format: https://[subaccount-id].cfapps.[region].hana.ondemand.com",
             ],
             "tested_at": tested_at,
+        }
+
+    async def run_code_inspection(self, transport_id: str) -> Dict:
+        """Run ABAP code inspection (ATC) for transport."""
+        token = await self.auth_client.get_token() if self.auth_client else None
+        if token is None:
+            logger.info("SAP BTP: using mock mode for code inspection")
+            return self._mock_inspection_result(transport_id)
+
+        try:
+            async with httpx.AsyncClient() as client:
+                response = await client.post(
+                    f"{self.settings.SAP_BTP_API_BASE_URL}/sap/bc/adt/atc/runs",
+                    headers={"Authorization": f"Bearer {token}"},
+                    json={"transportId": transport_id},
+                    timeout=30.0,
+                )
+                response.raise_for_status()
+                self.is_live = True
+                return self._parse_real_inspection_result(response.json())
+        except Exception as e:
+            logger.warning(
+                f"SAP BTP real code inspection failed, falling back to mock: {e}"
+            )
+            self.is_live = False
+            return self._mock_inspection_result(transport_id)
+
+    async def validate_transport_objects(self, transport_id: str) -> List[Dict]:
+        """Validate objects associated with a transport."""
+        token = await self.auth_client.get_token() if self.auth_client else None
+        if token is None:
+            return self._mock_transport_objects(transport_id)
+
+        try:
+            async with httpx.AsyncClient() as client:
+                response = await client.get(
+                    f"{self.settings.SAP_BTP_API_BASE_URL}/api/transports/{transport_id}/objects",
+                    headers={"Authorization": f"Bearer {token}"},
+                    timeout=30.0,
+                )
+                response.raise_for_status()
+                self.is_live = True
+                return response.json()
+        except Exception as e:
+            logger.warning(
+                f"SAP BTP transport objects retrieval failed, using mock: {e}"
+            )
+            self.is_live = False
+            return self._mock_transport_objects(transport_id)
+
+    async def validate_transport(self, transport_id: str) -> Dict:
+        """Run transport validation (naming conventions and dependencies)."""
+        objects = await self.validate_transport_objects(transport_id)
+        naming = []
+        dependencies = []
+        overall_valid = True
+
+        for obj in objects:
+            object_name = obj.get("object_name", "")
+            object_type = obj.get("object_type", "")
+            package = obj.get("package", "")
+
+            if not object_name.startswith(("Z", "Y")):
+                naming.append(
+                    {
+                        "object": object_name,
+                        "type": object_type,
+                        "issue": "Object name does not follow SAP custom namespace (Z/Y)",
+                        "severity": "ERROR",
+                    }
+                )
+                overall_valid = False
+            else:
+                naming.append(
+                    {
+                        "object": object_name,
+                        "type": object_type,
+                        "issue": "Object name follows SAP custom namespace",
+                        "severity": "INFO",
+                    }
+                )
+
+            if not package or not package.startswith(("Z", "Y", "$TMP")):
+                dependencies.append(
+                    {
+                        "object": object_name,
+                        "type": object_type,
+                        "issue": f"Package '{package}' may not be included in transport",
+                        "severity": "WARNING",
+                    }
+                )
+            else:
+                dependencies.append(
+                    {
+                        "object": object_name,
+                        "type": object_type,
+                        "issue": f"Package '{package}' is included",
+                        "severity": "INFO",
+                    }
+                )
+
+        error_count = sum(
+            1 for f in naming if f["severity"] == "ERROR"
+        )
+        warning_count = sum(
+            1 for f in naming if f["severity"] == "WARNING"
+        ) + sum(1 for f in dependencies if f["severity"] == "WARNING")
+
+        return {
+            "is_valid": overall_valid,
+            "total_objects": len(objects),
+            "error_count": error_count,
+            "warning_count": warning_count,
+            "naming_conventions": naming,
+            "dependencies": dependencies,
+            "summary": f"Validation complete: {error_count} errors, {warning_count} warnings",
         }

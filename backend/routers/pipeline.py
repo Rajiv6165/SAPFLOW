@@ -46,9 +46,9 @@ async def get_pipeline_status(request: Request, db: AsyncSession = Depends(get_d
                     "commit_sha": run.commit_sha,
                     "status": run.status,
                     "triggered_at": run.triggered_at.isoformat(),
-                    "completed_at": run.completed_at.isoformat()
-                    if run.completed_at
-                    else None,
+                    "completed_at": (
+                        run.completed_at.isoformat() if run.completed_at else None
+                    ),
                     "duration_seconds": run.duration_seconds,
                     "transport_id": run.transport_id,
                     "jobs": jobs,

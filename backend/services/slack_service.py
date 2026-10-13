@@ -77,9 +77,11 @@ class SlackService:
                                         "text": "View Pipeline",
                                     },
                                     "url": run_url,
-                                    "style": "primary"
-                                    if status.lower() == "success"
-                                    else "danger",
+                                    "style": (
+                                        "primary"
+                                        if status.lower() == "success"
+                                        else "danger"
+                                    ),
                                 }
                             ],
                         },
