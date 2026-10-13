@@ -232,7 +232,9 @@ def test_validate_transport_endpoint():
     async def run():
         client, _, engine = await setup_test_app_and_db()
         try:
-            response = await client.post("/api/v1/transport/validate?transport_id=DEVK900123")
+            response = await client.post(
+                "/api/v1/transport/validate?transport_id=DEVK900123"
+            )
             assert response.status_code == 200
             data = response.json()
             assert data["transport_id"] == "DEVK900123"

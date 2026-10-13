@@ -590,12 +590,10 @@ class SAPBTPService:
                     }
                 )
 
-        error_count = sum(
-            1 for f in naming if f["severity"] == "ERROR"
+        error_count = sum(1 for f in naming if f["severity"] == "ERROR")
+        warning_count = sum(1 for f in naming if f["severity"] == "WARNING") + sum(
+            1 for f in dependencies if f["severity"] == "WARNING"
         )
-        warning_count = sum(
-            1 for f in naming if f["severity"] == "WARNING"
-        ) + sum(1 for f in dependencies if f["severity"] == "WARNING")
 
         return {
             "is_valid": overall_valid,
